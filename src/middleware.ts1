@@ -1,0 +1,33 @@
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+
+export async function middleware(req: any) {
+  const url = req.nextUrl;
+  const pathname = url.pathname;
+
+  if (pathname.startsWith("/dashboard")) {
+    const token = req.cookies.get("authToken")?.value;
+
+    if (!token) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+
+    const user = await prisma.user.findFirst({
+      where: { authToken: token },
+    });
+
+    if (!user) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+
+    const subscription = await prisma.userSubscription.findFirst({
+      where: { userId: user.id, status: "ACTIVE" },
+    });
+
+    if (!subscription) {
+      return NextResponse.redirect(new URL("/payment-required", req.url));
+    }
+  }
+
+  return NextResponse.next();
+}

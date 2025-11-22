@@ -1,0 +1,217 @@
+// ==============================
+//      GENERATOR + DATASOURCE
+// ==============================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==============================
+//      TENANT (COMPANY)
+// ==============================
+model Tenant {
+  id        Int       @id @default(autoincrement())
+  name      String
+  country   String?
+  timezone  String?
+  createdAt DateTime  @default(now())
+
+  // RELATIONS
+  users           User[]
+  settings        TenantSettings?
+  smtpCredentials SmtpCredentials?
+
+  onboarding      Onboarding?
+  mailAccounts    MailAccount[]
+  apiKeys         TenantApiKey[]
+}
+
+// ==============================
+//      USER
+// ==============================
+model User {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  name       String
+  email      String    @unique
+  mobile     String?
+  password   String
+  role       String
+  createdAt  DateTime  @default(now())
+  onboardingCompleted Boolean @default(false)
+  profileImage String?
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  onboarding Onboarding?
+}
+
+// ==============================
+//      TENANT SETTINGS
+// ==============================
+model TenantSettings {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int      @unique
+  aiPrimary        String   @default("openai")
+  aiFallback       String   @default("deepseek,gemini")
+  aiModel          String   @default("gpt-4o-mini")
+  aiMode           String   @default("balanced")
+  tone             String   @default("professional")
+  autoReply        Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+// ==============================
+//      SMTP CREDENTIALS
+// ==============================
+model SmtpCredentials {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int      @unique
+  host      String?
+  port      Int?
+  username  String?
+  password  String?
+  createdAt DateTime @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+}
+
+// ==============================
+//      TENANT API KEYS
+// ==============================
+model TenantApiKey {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  provider  String   // openai, deepseek, gemini, claude
+  apiKey    String
+  createdAt DateTime @default(now())
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// ==============================
+//      ONBOARDING
+// ==============================
+
+model Onboarding {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  tenantId     Int
+  businessName String?
+  phone        String?
+  website      String?
+  about        String?
+  services     String?
+  pricing      String?
+  tone         String?
+
+  user         User     @relation(fields: [userId], references: [id])
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+
+// ==============================
+//      MAIL ACCOUNT (UPDATED)
+// ==============================
+model MailAccount {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      // ⭐ REQUIRED — FIXED
+  name       String
+
+  // Email identity
+  email      String
+
+  // SMTP
+  smtpHost   String
+  smtpPort   Int
+  smtpSecure Boolean  @default(false)
+  smtpUser   String
+  smtpPass   String   // TODO: encrypt later
+
+  // IMAP
+  imapHost   String?
+  imapPort   Int?
+  imapSecure Boolean  @default(false)
+  imapUser   String?
+  imapPass   String?
+
+  // Gmail OAuth support
+  authType     String   @default("password") // password | oauth
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  oauthExpiry       DateTime?
+
+  provider   String   // gmail | custom | outlook
+  active     Boolean  @default(true)
+
+  createdAt  DateTime @default(now())
+
+  tenant       Tenant     @relation(fields: [tenantId], references: [id])
+  MailLogs     MailLog[]
+  IncomingEmail IncomingEmail[]
+}
+
+// ==============================
+//      MAIL LOGS
+// ==============================
+model MailLog {
+  id            Int      @id @default(autoincrement())
+  mailAccountId Int
+  type          String   // send | receive | error
+  to            String?
+  from          String?
+  subject       String?
+  body          String?  @db.Text
+  status        String?  // ok | failed
+  error         String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  mailAccount MailAccount @relation(fields: [mailAccountId], references: [id])
+}
+
+// ==============================
+//      INCOMING EMAIL
+// ==============================
+model IncomingEmail {
+  id            Int      @id @default(autoincrement())
+  mailAccountId Int
+  from          String?
+  to            String?
+  subject       String?
+  body          String?  @db.Text
+  html          String?  @db.Text
+  raw           String?  @db.Text
+  messageId     String?
+  processed     Boolean  @default(false)
+  status        String?  @default("pending")
+  createdAt     DateTime @default(now())
+
+  mailAccount   MailAccount @relation(fields: [mailAccountId], references: [id])
+}
+
+// ==============================
+//      LEADS
+// ==============================
+model Lead {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String?
+  phone     String?
+  source    String?
+  createdAt DateTime @default(now())
+}
+
+// ==============================
+//      TRAFFIC
+// ==============================
+model Traffic {
+  id     Int      @id @default(autoincrement())
+  date   DateTime
+  visits Int
+}
