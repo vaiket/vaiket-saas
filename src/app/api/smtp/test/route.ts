@@ -7,31 +7,56 @@ import nodemailer from "nodemailer";
 export async function POST(req: Request) {
   try {
     const token = getTokenData(req);
-    if (!token) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    if (!token)
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
 
     const body = await req.json();
-    const { to, subject = "SMTP Test", text = "This is a test email from Vaiket." } = body;
-    if (!to) return NextResponse.json({ success: false, error: "Missing to address" }, { status: 400 });
+    const {
+      to,
+      subject = "SMTP Test",
+      text = "This is a test email from Vaiket.",
+      from,
+    } = body;
 
-    const creds = await prisma.smtpCredentials.findUnique({ where: { tenantId: token.tenantId } });
-    if (!creds) return NextResponse.json({ success: false, error: "No SMTP credentials set for tenant" }, { status: 404 });
+    if (!to)
+      return NextResponse.json(
+        { success: false, error: "Missing 'to' email address" },
+        { status: 400 }
+      );
+
+    const creds = await prisma.smtpCredentials.findUnique({
+      where: { tenantId: token.tenantId },
+    });
+
+    if (!creds)
+      return NextResponse.json(
+        { success: false, error: "No SMTP credentials set for tenant" },
+        { status: 404 }
+      );
+
+    const port = Number(creds.port);
 
     const transporter = nodemailer.createTransport({
       host: creds.host!,
-      port: Number(creds.port),
-      secure: Boolean(creds.port === 465 || creds.port === "465" || creds.port ===  true), // auto
+      port,
+      secure: port === 465, // ✅ FIX — clean & type-safe
       auth: {
         user: creds.username!,
         pass: creds.password!,
       },
-      tls: { rejectUnauthorized: false }, // allow self-signed, helpful for some cpanel servers
+      tls: {
+        rejectUnauthorized: false, // ✅ allows cPanel/shared hosting
+      },
     });
 
-    // verify first (helps detect auth/host errors)
+    // ✅ verify SMTP config first
     await transporter.verify();
 
     const info = await transporter.sendMail({
-      from: body.from || process.env.DEFAULT_FROM || creds.username!,
+      from: from || process.env.DEFAULT_FROM || creds.username!,
       to,
       subject,
       text,
@@ -40,6 +65,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, info });
   } catch (err: any) {
     console.error("SMTP test error:", err);
-    return NextResponse.json({ success: false, error: err.message || String(err) }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err.message || String(err) },
+      { status: 500 }
+    );
   }
 }

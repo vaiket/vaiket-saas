@@ -1,18 +1,17 @@
-// prompts/summarize.ts
-export const placeholderPromptSummarize = `export interface SummarizePromptInput {
-thread: string; // full email thread or long message
-tenantName: string;
+export interface SummarizePromptInput {
+  thread: string; // full email thread or long message
+  tenantName: string;
 }
 
-
-export function buildSummarizePrompt({ thread, tenantName }: SummarizePromptInput) {
-return `You are V-AI, the conversation summarization engine for ${tenantName}.
+export function buildSummarizePrompt({
+  thread,
+  tenantName,
+}: SummarizePromptInput) {
+  return `You are V-AI, the conversation summarization engine for ${tenantName}.
 Your task is to read the entire email thread and produce a clear, short summary.
-
 
 --- FULL THREAD ---
 ${thread}
-
 
 --- RULES ---
 1. Create a short, concise summary (4-6 lines maximum).
@@ -22,6 +21,5 @@ ${thread}
 5. Do NOT add extra information that is not present.
 6. If sensitive data appears, summarize it neutrally.
 
-
 --- NOW GENERATE THE SUMMARY BELOW ---`;
-}`;
+}

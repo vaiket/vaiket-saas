@@ -1,52 +1,66 @@
 // src/workers/smtp-worker.ts
-import { Worker, QueueScheduler } from "bullmq";
+import { Worker, QueueEvents } from "bullmq";
 import IORedis from "ioredis";
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 
-const REDIS_URL = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : null);
-if (!REDIS_URL) {
-  console.error("No REDIS_URL configured — worker will not run.");
-  process.exit(1);
-}
+// ✅ Redis connection
+const connection = new IORedis(process.env.REDIS_URL || "redis://127.0.0.1:6379");
 
-const connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+// ✅ Logs worker job events (replaces QueueScheduler)
+const queueEvents = new QueueEvents("smtp-send", { connection });
 
-// Create scheduler (recommended)
-new QueueScheduler("smtp-send", { connection });
+queueEvents.on("completed", ({ jobId }) => {
+  console.log(`✅ SMTP job completed: ${jobId}`);
+});
 
-const worker = new Worker(
+queueEvents.on("failed", ({ jobId, failedReason }) => {
+  console.error(`❌ SMTP job failed: ${jobId} — ${failedReason}`);
+});
+
+// ✅ Actual email worker
+export const worker = new Worker(
   "smtp-send",
   async (job) => {
-    const { tenantId, credsId, payload } = job.data;
-    // fetch fresh creds from DB
-    const creds = await prisma.smtpCredentials.findUnique({ where: { id: credsId } });
-    if (!creds) throw new Error("SMTP creds not found for job");
+    const { to, subject, body, accountId } = job.data;
 
-    const transporter = nodemailer.createTransport({
-      host: creds.host!,
-      port: Number(creds.port),
-      secure: Number(creds.port) === 465,
-      auth: {
-        user: creds.username!,
-        pass: creds.password!,
-      },
-      tls: { rejectUnauthorized: false },
+    const acc = await prisma.mailAccount.findUnique({
+      where: { id: accountId },
     });
 
-    await transporter.verify();
-    const info = await transporter.sendMail(payload);
-    console.log("SMTP worker: sent", payload.to, info.messageId);
-    return info;
+    if (!acc) throw new Error("Mail account not found");
+
+    const transporter = nodemailer.createTransport({
+      host: acc.smtpHost,
+      port: acc.smtpPort,
+      secure: acc.smtpSecure,
+      auth: {
+        user: acc.smtpUser,
+        pass: acc.smtpPass,
+      },
+    });
+
+    await transporter.sendMail({
+      from: acc.email,
+      to,
+      subject,
+      text: body,
+      html: `<pre>${body}</pre>`,
+    });
+
+    await prisma.mailLog.create({
+      data: {
+        mailAccountId: acc.id,
+        type: "outgoing",
+        to,
+        from: acc.email,
+        subject,
+        body,
+        status: "sent",
+      },
+    });
   },
   { connection }
 );
 
-worker.on("completed", (job) => {
-  console.log("Job completed:", job.id);
-});
-worker.on("failed", (job, err) => {
-  console.error("Job failed:", job?.id, err);
-});
-
-console.log("SMTP Worker started");
+console.log("📨 SMTP Worker running...");

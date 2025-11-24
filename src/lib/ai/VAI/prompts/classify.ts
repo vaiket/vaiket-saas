@@ -1,48 +1,52 @@
-// prompts/classify.ts
-export const placeholderPromptClassify = `export interface ClassifyPromptInput {
-subject: string;
-text: string;
-tenantName: string;
+// src/lib/ai/VAI/prompts/classify.ts
+
+export interface ClassifyPromptInput {
+  subject: string;
+  text: string;
+  tenantName: string;
 }
 
-
-// Classification categories for email intent
-// These are essential for auto-routing, safety, and escalation.
+// ✅ Classification categories for routing & automation
 export const EMAIL_INTENT_CATEGORIES = [
-"general_query",
-"pricing",
-"technical_issue",
-"complaint",
-"refund_request",
-"billing_issue",
-"account_access",
-"order_status",
-"spam",
-"sales_lead",
-"requires_human" // final fallback
+  "general_query",
+  "pricing",
+  "technical_issue",
+  "complaint",
+  "refund_request",
+  "billing_issue",
+  "account_access",
+  "order_status",
+  "spam",
+  "sales_lead",
+  "requires_human" // safety fallback
 ];
 
+export function buildClassifyPrompt({
+  subject,
+  text,
+  tenantName,
+}: ClassifyPromptInput) {
+  return `
+You are **V-AI**, the intent-classification engine for **${tenantName}**.
 
-export function buildClassifyPrompt({ subject, text, tenantName }: ClassifyPromptInput) {
-return `You are V-AI, the intelligent classification engine for ${tenantName}.
-Your job is to analyze the user's email and classify its intent into ONE category.
-
+Your task: read the incoming email and classify it into EXACTLY **ONE** category.
 
 --- EMAIL DATA ---
-Subject: ${subject}
+Subject: "${subject}"
+Body:
 ${text}
 
-
---- CATEGORIES ---
+--- VALID CATEGORIES ---
 ${EMAIL_INTENT_CATEGORIES.join(", ")}
 
+--- CLASSIFICATION RULES ---
+1️⃣ Return ONLY the category name — no sentences, no explanation.
+2️⃣ If billing, refund, money, cancellation, OTP, password → "requires_human"
+3️⃣ If promotional, marketing, suspicious → "spam"
+4️⃣ If unsure → safest match
+5️⃣ Never invent new categories
 
---- RULES ---
-1. Return ONLY the category name, nothing else.
-2. If the email contains sensitive requests (refunds, billing, OTP, password, account deletion) → return "requires_human".
-3. If it contains promotions, ads, or looks automated → return "spam".
-4. If unsure → choose the safest category.
-
-
---- NOW RETURN ONLY ONE CATEGORY BELOW ---`;
-}`;
+✅ OUTPUT FORMAT (REQUIRED):
+category_name_here
+  `.trim();
+}

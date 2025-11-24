@@ -27,12 +27,24 @@ export async function GET(req: Request) {
     }
 
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-    const tenantId = decoded.tenantId;
+    const tenantId = decoded?.tenantId;
 
+    if (!tenantId) {
+      return NextResponse.json(
+        { success: false, error: "Invalid tenant" },
+        { status: 403 }
+      );
+    }
+
+    // ✅ Ensure tenant settings exist
     await ensureTenantSettings(tenantId);
 
+    // ✅ Fetch incoming emails for contact
     const incoming = await prisma.incomingEmail.findMany({
-      where: { tenantId, OR: [{ from: email }, { to: email }] },
+      where: {
+        tenantId,
+        OR: [{ from: email }, { to: email }],
+      },
       select: {
         id: true,
         from: true,
@@ -43,8 +55,12 @@ export async function GET(req: Request) {
       },
     });
 
+    // ✅ Fetch outgoing emails for contact
     const outgoing = await prisma.mailLog.findMany({
-      where: { mailAccount: { tenantId }, OR: [{ to: email }, { from: email }] },
+      where: {
+        mailAccount: { tenantId },
+        OR: [{ to: email }, { from: email }],
+      },
       select: {
         id: true,
         to: true,
@@ -56,6 +72,7 @@ export async function GET(req: Request) {
       },
     });
 
+    // ✅ Merge + sort chronologically
     const messages = [
       ...incoming.map((m) => ({
         id: `in-${m.id}`,

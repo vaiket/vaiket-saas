@@ -115,6 +115,10 @@ model MailAccount {
   oauthExpiry       DateTime?
   IncomingEmail     IncomingEmail[]
   tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  oauthProvider     String?
+  oauthExpiresAt    DateTime?
+
+
   MailLogs          MailLog[]
 }
 

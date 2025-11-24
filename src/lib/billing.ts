@@ -1,5 +1,6 @@
 // lib/billing.ts
-import { supabaseAdmin } from './supabaseAdmin';
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+;
 
 export async function consumeResponse(tenantId: number, count = 1) {
   // Atomically increment responses_used if remaining available

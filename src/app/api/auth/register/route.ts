@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -12,19 +11,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
-    // Check existing user
+    // ✅ Check if user already exists
     const existing = await prisma.user.findUnique({
       where: { email },
     });
 
     if (existing) {
-      return NextResponse.json({ error: "Email already exists" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Email already exists" },
+        { status: 409 }
+      );
     }
 
-    // Hash password
+    // ✅ Hash password
     const hashed = await bcrypt.hash(password, 10);
 
-    // 1. Create tenant
+    // ✅ 1. Create tenant
     const tenant = await prisma.tenant.create({
       data: {
         name: business,
@@ -32,7 +34,7 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2. Create user (admin)
+    // ✅ 2. Create user (admin)
     const user = await prisma.user.create({
       data: {
         tenantId: tenant.id,
@@ -43,13 +45,13 @@ export async function POST(req: Request) {
       },
     });
 
-    // 3. Create default settings
+    // ✅ 3. Create default tenant AI settings
     await prisma.tenantSettings.create({
       data: {
         tenantId: tenant.id,
         aiPrimary: "deepseek",
         aiFallback: "gemini,chatgpt",
-        mode: "draft",
+        aiMode: "draft", // ✅ FIXED — use correct Prisma field
       },
     });
 
@@ -58,9 +60,11 @@ export async function POST(req: Request) {
       tenantId: tenant.id,
       userId: user.id,
     });
-
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ error: "Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Server Error" },
+      { status: 500 }
+    );
   }
 }

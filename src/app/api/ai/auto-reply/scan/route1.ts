@@ -8,9 +8,7 @@ import { ensureTenantSettings } from "@/lib/ensureTenantSettings";
 
 export async function POST() {
   try {
-    // ------------------------
-    // STEP 1 — AUTH CHECK
-    // ------------------------
+    // ✅ STEP 1 — AUTH CHECK
     const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
 
@@ -33,12 +31,10 @@ export async function POST() {
 
     const tenantId = decoded.tenantId;
 
-    //send here 
+    // ✅ Ensure tenant settings exist
+    await ensureTenantSettings(tenantId);
 
-await ensureTenantSettings(tenantId);
-    // ------------------------
-    // STEP 2 — GET TENANT SETTINGS (AI ON/OFF)
-    // ------------------------
+    // ✅ STEP 2 — CHECK AUTO-REPLY SETTING
     const settings = await prisma.tenantSettings.findUnique({
       where: { tenantId },
     });
@@ -50,14 +46,9 @@ await ensureTenantSettings(tenantId);
       });
     }
 
-    // ------------------------
-    // STEP 3 — FIND UNPROCESSED NEW MAIL
-    // ------------------------
+    // ✅ STEP 3 — GET ONE UNPROCESSED MAIL
     const mail = await prisma.incomingEmail.findFirst({
-      where: {
-        tenantId,
-        processed: false,
-      },
+      where: { tenantId, processed: false },
       orderBy: { createdAt: "asc" },
     });
 
@@ -68,9 +59,7 @@ await ensureTenantSettings(tenantId);
       });
     }
 
-    // ------------------------
-    // STEP 4 — FETCH MAIL ACCOUNT (SMTP SEND)
-    // ------------------------
+    // ✅ STEP 4 — GET SMTP ACCOUNT
     const mailAccount = await prisma.mailAccount.findFirst({
       where: { tenantId, active: true },
     });
@@ -85,9 +74,15 @@ await ensureTenantSettings(tenantId);
     const myEmail = mailAccount.email;
     const customerEmail = mail.from || mail.to;
 
-    // ------------------------
-    // STEP 5 — GENERATE AI REPLY
-    // ------------------------
+    if (!customerEmail) {
+      console.log("Skipping — missing recipient");
+      return NextResponse.json({
+        success: false,
+        error: "Missing customer email",
+      });
+    }
+
+    // ✅ STEP 5 — GENERATE AI REPLY
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const aiPrompt = `
@@ -95,7 +90,7 @@ You are an AI business assistant. Reply professionally.
 
 Customer message:
 "${mail.body}"
-    `;
+`;
 
     const aiRes = await client.chat.completions.create({
       model: settings.aiModel || "gpt-4o-mini",
@@ -107,9 +102,7 @@ Customer message:
       aiRes.choices[0].message.content ||
       "Thank you for your message. We will get back shortly.";
 
-    // ------------------------
-    // STEP 6 — SEND EMAIL VIA SMTP
-    // ------------------------
+    // ✅ STEP 6 — SEND VIA SMTP
     const transporter = nodemailer.createTransport({
       host: mailAccount.smtpHost,
       port: mailAccount.smtpPort,
@@ -128,9 +121,7 @@ Customer message:
       html: `<pre>${replyText}</pre>`,
     });
 
-    // ------------------------
-    // STEP 7 — SAVE OUTGOING LOG
-    // ------------------------
+    // ✅ STEP 7 — LOG OUTGOING MAIL
     await prisma.mailLog.create({
       data: {
         mailAccountId: mailAccount.id,
@@ -143,9 +134,7 @@ Customer message:
       },
     });
 
-    // ------------------------
-    // STEP 8 — MARK INCOMING MAIL AS PROCESSED
-    // ------------------------
+    // ✅ STEP 8 — MARK ORIGINAL MAIL PROCESSED
     await prisma.incomingEmail.update({
       where: { id: mail.id },
       data: { processed: true },

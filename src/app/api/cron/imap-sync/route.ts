@@ -1,13 +1,10 @@
-// src/app/api/cron/imap-sync/route.ts
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
+import { simpleParser, AddressObject, EmailAddress } from "mailparser";
 
 export async function POST() {
   try {
-    // Get all active mail accounts for all tenants
     const accounts = await prisma.mailAccount.findMany({
       where: { active: true },
     });
@@ -22,8 +19,7 @@ export async function POST() {
       const client = new ImapFlow({
         host: acc.imapHost,
         port: acc.imapPort,
-        secure: true,
-        tlsOptions: { rejectUnauthorized: false },
+        secure: true, // ✅ THIS IS ENOUGH
         auth: {
           user: acc.imapUser,
           pass: acc.imapPass,
@@ -34,11 +30,30 @@ export async function POST() {
       await client.mailboxOpen("INBOX");
 
       const lock = await client.getMailboxLock("INBOX");
+
       try {
         for await (const msg of client.fetch({ seen: false }, { source: true })) {
+          if (!msg.source) continue;
           const parsed = await simpleParser(msg.source);
 
-          const messageId = parsed.messageId || `msg-${Date.now()}`;
+          const extract = (
+            input: AddressObject | AddressObject[] | undefined
+          ): string => {
+            if (!input) return "";
+            const list = Array.isArray(input) ? input : [input];
+            return list
+              .flatMap(obj =>
+                obj.value.map((v: EmailAddress) => v.address ?? "")
+              )
+              .filter(Boolean)
+              .join(",");
+          };
+
+          const from = extract(parsed.from);
+          const to = extract(parsed.to);
+
+          const messageId =
+            parsed.messageId || `msg-${acc.id}-${Date.now()}-${Math.random()}`;
 
           const exists = await prisma.incomingEmail.findFirst({
             where: {
@@ -53,13 +68,12 @@ export async function POST() {
             data: {
               tenantId: acc.tenantId,
               mailAccountId: acc.id,
-
-              from: parsed.from?.text || "",
-              to: parsed.to?.text || "",
-              subject: parsed.subject || "",
-              body: parsed.text || "",
-              html: parsed.html || "",
-              raw: parsed.textAsHtml || "",
+              from,
+              to,
+              subject: parsed.subject ?? "",
+              body: parsed.text ?? "",
+              html: typeof parsed.html === "string" ? parsed.html : "",
+              raw: typeof parsed.textAsHtml === "string" ? parsed.textAsHtml : "",
               messageId,
             },
           });
@@ -76,10 +90,10 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       inserted: totalInserted,
-      message: "IMAP sync run complete",
+      message: "IMAP sync completed ✅",
     });
   } catch (err: any) {
-    console.error("CRON IMAP ERROR:", err);
+    console.error("IMAP SYNC ERROR:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Server error" },
       { status: 500 }

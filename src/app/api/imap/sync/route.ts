@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
+import { simpleParser, AddressObject, EmailAddress } from "mailparser";
 import { prisma } from "@/lib/prisma";
 import { getTokenData } from "@/lib/auth1";
 
@@ -31,8 +31,7 @@ export async function POST(req: Request) {
     const client = new ImapFlow({
       host: acc.imapHost,
       port: acc.imapPort,
-      secure: true,
-      tlsOptions: { rejectUnauthorized: false },
+      secure: true, // ✅ no tlsOptions needed
       auth: {
         user: acc.imapUser,
         pass: acc.imapPass
@@ -45,14 +44,30 @@ export async function POST(req: Request) {
 
     let inserted = 0;
 
+    // ✅ Helper to clean email addresses safely
+    const extract = (
+      input: AddressObject | AddressObject[] | undefined
+    ): string => {
+      if (!input) return "";
+      const arr = Array.isArray(input) ? input : [input];
+
+      return arr
+        .flatMap(obj =>
+          obj.value.map((v: EmailAddress) => v.address ?? "")
+        )
+        .filter(Boolean)
+        .join(",");
+    };
+
     try {
-      // fetch ALL emails, not only unread
-      for await (const msg of client.fetch("1:*", { source: true, envelope: true })) {
+      for await (const msg of client.fetch("1:*", { source: true })) {
+        if (!msg.source) continue;
+
         const parsed = await simpleParser(msg.source);
 
-        const messageId = parsed.messageId || `${parsed.subject}-${msg.uid}`;
+        const messageId =
+          parsed.messageId || `msg-${acc.id}-${Date.now()}-${Math.random()}`;
 
-        // check duplicate inside same tenant
         const exists = await prisma.incomingEmail.findFirst({
           where: {
             messageId,
@@ -66,13 +81,12 @@ export async function POST(req: Request) {
           data: {
             tenantId: acc.tenantId,
             mailAccountId: acc.id,
-
-            from: parsed.from?.text || "",
-            to: parsed.to?.text || "",
-            subject: parsed.subject || "",
-            body: parsed.text || "",
-            html: parsed.html || "",
-            raw: parsed.textAsHtml || "",
+            from: extract(parsed.from),
+            to: extract(parsed.to),
+            subject: parsed.subject ?? "",
+            body: parsed.text ?? "",
+            html: typeof parsed.html === "string" ? parsed.html : "",
+            raw: typeof parsed.textAsHtml === "string" ? parsed.textAsHtml : "",
             messageId
           }
         });
@@ -88,7 +102,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       inserted,
-      message: "IMAP sync completed successfully"
+      message: "IMAP sync completed successfully ✅"
     });
 
   } catch (err: any) {

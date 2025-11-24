@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { 
+import { Paperclip } from "lucide-react";
+import {
   Mail, 
   Server, 
   RefreshCw, 

@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       where: { id: accountId },
     });
 
-    // 🔥 MULTI-TENANT CHECK
+    // ✅ Multi-tenant security
     if (!acc || acc.tenantId !== token.tenantId) {
       return NextResponse.json(
         { success: false, error: "Account not found for your tenant" },
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔥 REQUIRED IMAP FIELDS
+    // ✅ Ensure IMAP credentials exist
     if (!acc.imapHost || !acc.imapPort || !acc.imapUser || !acc.imapPass) {
       return NextResponse.json(
         { success: false, error: "Missing IMAP details" },
@@ -41,11 +41,12 @@ export async function POST(req: Request) {
       );
     }
 
+    // ✅ FIX — remove tlsOptions, use tls instead
     const client = new ImapFlow({
       host: acc.imapHost,
       port: acc.imapPort,
       secure: true,
-      tlsOptions: { rejectUnauthorized: false },
+      tls: { rejectUnauthorized: false }, // ✅ correct ImapFlow option
       auth: {
         user: acc.imapUser,
         pass: acc.imapPass,
@@ -57,8 +58,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "IMAP connection successful!",
+      message: "IMAP connection successful ✅",
     });
+
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || "Test failed" },

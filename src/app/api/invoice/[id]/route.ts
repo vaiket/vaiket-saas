@@ -5,11 +5,11 @@ import PDFDocument from "pdfkit";
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
-) {
+  context: { params: Promise<{ id: string }> }
+): Promise<Response> {
   try {
-    // ✅ Transaction ID from URL
-    const transactionId = params.id;
+    // ✅ Await params — required in Next.js 16 types
+    const { id: transactionId } = await context.params;
 
     if (!transactionId) {
       return NextResponse.json(
@@ -18,7 +18,7 @@ export async function GET(
       );
     }
 
-    // ✅ Read JWT token from cookies
+    // ✅ Read JWT from cookies
     const cookieHeader = req.headers.get("cookie") || "";
     const token = cookieHeader
       .split(";")
@@ -26,9 +26,12 @@ export async function GET(
       ?.split("=")[1];
 
     if (!token)
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 }
+      );
 
-    // ✅ Decode token
+    // ✅ Verify token
     let decoded: any;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET!);
@@ -41,18 +44,19 @@ export async function GET(
 
     const { tenantId } = decoded;
 
-    // ✅ Fetch transaction from DB
+    // ✅ Fetch transaction
     const tx = await prisma.transactions.findUnique({
       where: { id: BigInt(transactionId) },
     });
 
-    if (!tx)
+    if (!tx) {
       return NextResponse.json(
         { ok: false, error: "Transaction not found" },
         { status: 404 }
       );
+    }
 
-    // ✅ Prevent invoice theft — enforce tenant ownership
+    // ✅ Prevent invoice theft
     if (tenantId && BigInt(tenantId) !== tx.tenant_id) {
       return NextResponse.json(
         { ok: false, error: "Not authorized to view this invoice" },
@@ -60,14 +64,13 @@ export async function GET(
       );
     }
 
-    // ✅ Create PDF Invoice
+    // ✅ Create PDF invoice
     const doc = new PDFDocument();
     const chunks: Uint8Array[] = [];
 
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => {});
 
-    // ✅ Header
     doc.fontSize(20).text("Vaiket Invoice", { align: "center" });
     doc.moveDown();
 
