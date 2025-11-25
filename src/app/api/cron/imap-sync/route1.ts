@@ -10,47 +10,30 @@ export async function POST() {
     });
 
     let totalInserted = 0;
-    let accountIndex = 0;
 
     for (const acc of accounts) {
-      accountIndex++;
-
-      // Skip invalid accounts
       if (!acc.imapHost || !acc.imapPort || !acc.imapUser || !acc.imapPass) {
-        console.log(`Skipping account ${acc.id} — missing IMAP fields`);
         continue;
       }
 
-      console.log(`⏳ Connecting IMAP (${accountIndex}/${accounts.length}) —`, acc.email);
-
-      // FIXED: Dynamic SSL mode (VERY IMPORTANT)
       const client = new ImapFlow({
         host: acc.imapHost,
         port: acc.imapPort,
-        secure: acc.imapSecure === true,  // FIXED ✔
+        secure: true, // ✅ THIS IS ENOUGH
         auth: {
           user: acc.imapUser,
           pass: acc.imapPass,
         },
-        tls: {
-          rejectUnauthorized: false, // FIX for cPanel shared servers
-        },
       });
 
-      try {
-        await client.connect();
-        await client.mailboxOpen("INBOX");
-      } catch (err: any) {
-        console.error("❌ IMAP CONNECT ERROR:", err.message);
-        continue; // Skip only this account, don't break sync
-      }
+      await client.connect();
+      await client.mailboxOpen("INBOX");
 
       const lock = await client.getMailboxLock("INBOX");
 
       try {
         for await (const msg of client.fetch({ seen: false }, { source: true })) {
           if (!msg.source) continue;
-
           const parsed = await simpleParser(msg.source);
 
           const extract = (
@@ -59,7 +42,7 @@ export async function POST() {
             if (!input) return "";
             const list = Array.isArray(input) ? input : [input];
             return list
-              .flatMap((obj) =>
+              .flatMap(obj =>
                 obj.value.map((v: EmailAddress) => v.address ?? "")
               )
               .filter(Boolean)
@@ -69,9 +52,8 @@ export async function POST() {
           const from = extract(parsed.from);
           const to = extract(parsed.to);
 
-          // FIXED: Use UID to avoid duplicates
           const messageId =
-            parsed.messageId || `uid-${msg.uid}-${acc.id}-${Date.now()}`;
+            parsed.messageId || `msg-${acc.id}-${Date.now()}-${Math.random()}`;
 
           const exists = await prisma.incomingEmail.findFirst({
             where: {
@@ -91,34 +73,27 @@ export async function POST() {
               subject: parsed.subject ?? "",
               body: parsed.text ?? "",
               html: typeof parsed.html === "string" ? parsed.html : "",
-              raw:
-                typeof parsed.textAsHtml === "string"
-                  ? parsed.textAsHtml
-                  : "",
+              raw: typeof parsed.textAsHtml === "string" ? parsed.textAsHtml : "",
               messageId,
             },
           });
 
           totalInserted++;
-
-          // Mark as seen (optional)
-          // await client.messageFlagsAdd(msg.uid, ["\\Seen"]);
         }
-      } catch (err: any) {
-        console.error("❌ FETCH ERROR:", err.message);
       } finally {
         lock.release();
-        await client.logout();
       }
+
+      await client.logout();
     }
 
     return NextResponse.json({
       success: true,
       inserted: totalInserted,
-      message: "IMAP sync completed successfully ✔",
+      message: "IMAP sync completed ✅",
     });
   } catch (err: any) {
-    console.error("🔴 MAIN SYNC ERROR:", err);
+    console.error("IMAP SYNC ERROR:", err);
     return NextResponse.json(
       { success: false, error: err?.message || "Server error" },
       { status: 500 }
