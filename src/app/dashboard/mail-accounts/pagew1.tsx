@@ -67,25 +67,12 @@ export default function MailAccountsPage() {
   // Save account
   async function saveAccount() {
     setLoading(true);
-
-    // Build payload but omit empty password fields so backend keeps existing ones
-    const payload: any = {
+    const body = {
       id: editingId,
-      name: form.name,
-      email: form.email,
-      smtpHost: form.smtpHost,
-      smtpPort: form.smtpPort ? Number(form.smtpPort) : null,
-      smtpUser: form.smtpUser,
+      ...form,
       smtpSecure: form.smtpSecure === "ssl",
-      imapHost: form.imapHost,
-      imapPort: form.imapPort ? Number(form.imapPort) : null,
-      imapUser: form.imapUser,
       imapSecure: form.imapSecure === "ssl",
     };
-
-    // Only attach passwords if the user provided them (non-empty)
-    if (form.smtpPass && form.smtpPass.trim() !== "") payload.smtpPass = form.smtpPass.trim();
-    if (form.imapPass && form.imapPass.trim() !== "") payload.imapPass = form.imapPass.trim();
 
     const url = editingId ? "/api/mail-accounts/update" : "/api/mail-accounts/add";
 
@@ -93,7 +80,7 @@ export default function MailAccountsPage() {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!data.success) {
@@ -139,14 +126,12 @@ export default function MailAccountsPage() {
       smtpHost: acc.smtpHost || "",
       smtpPort: acc.smtpPort ? String(acc.smtpPort) : "",
       smtpUser: acc.smtpUser || "",
-      // IMPORTANT: do NOT populate the password field with stored password
-      smtpPass: "",
+      smtpPass: acc.smtpPass || "",
       smtpSecure: acc.smtpSecure ? "ssl" : "none",
       imapHost: acc.imapHost || "",
       imapPort: acc.imapPort ? String(acc.imapPort) : "",
       imapUser: acc.imapUser || "",
-      // IMPORTANT: keep empty so the user must re-enter to change
-      imapPass: "",
+      imapPass: acc.imapPass || "",
       imapSecure: acc.imapSecure ? "ssl" : "none"
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -309,12 +294,11 @@ export default function MailAccountsPage() {
                       <label className="text-sm font-medium text-gray-700">SMTP Password</label>
                       <input
                         type="password"
-                        placeholder="•••••••• (leave blank to keep existing)"
+                        placeholder="••••••••"
                         value={form.smtpPass}
                         onChange={(e) => updateForm("smtpPass", e.target.value)}
                         className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Leave blank to keep current password.</p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-700">Security</label>
@@ -368,12 +352,11 @@ export default function MailAccountsPage() {
                       <label className="text-sm font-medium text-gray-700">IMAP Password</label>
                       <input
                         type="password"
-                        placeholder="•••••••• (leave blank to keep existing)"
+                        placeholder="••••••••"
                         value={form.imapPass}
                         onChange={(e) => updateForm("imapPass", e.target.value)}
                         className="w-full bg-gray-50 border border-gray-300 rounded-xl px-4 py-3 text-gray-900 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300"
                       />
-                      <p className="text-xs text-gray-400 mt-1">Leave blank to keep current password.</p>
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-gray-700">Security</label>
