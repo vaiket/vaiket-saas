@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, Mail, User, Shield, Zap, Bot, MailOpen, Lock, ArrowRight, Sparkles, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, User, Shield, Zap, Bot, MailOpen, Lock, ArrowRight, Sparkles, CheckCircle, Building } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -9,14 +9,13 @@ export default function RegisterPage() {
   const router = useRouter();
 
   const [data, setData] = useState({
-    fullName: "",
+    name: "",
     email: "",
     password: "",
-    confirmPassword: "",
+    business: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showPassword2, setShowPassword2] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -30,18 +29,13 @@ export default function RegisterPage() {
     setPasswordStrength(strength);
   };
 
-  async function handleSendOtp() {
+  async function handleRegister() {
     setIsLoading(true);
     setError("");
 
-    if (!data.fullName || !data.email || !data.password || !data.confirmPassword) {
+    // Check if all fields are filled
+    if (!data.name || !data.email || !data.password || !data.business) {
       setError("Please fill all fields");
-      setIsLoading(false);
-      return;
-    }
-
-    if (data.password !== data.confirmPassword) {
-      setError("Passwords do not match");
       setIsLoading(false);
       return;
     }
@@ -53,24 +47,27 @@ export default function RegisterPage() {
     }
 
     try {
-      const res = await fetch("/api/auth/send-otp", {
+      const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
       const json = await res.json();
-
-      if (!json.success) {
+      
+      if (!res.ok) {
         setError(json.error || "Something went wrong");
+        setIsLoading(false);
         return;
       }
 
-      // Redirect to OTP page
-      router.push(`/verify-otp?email=${data.email}`);
+      console.log(json);
+      alert("Registered Successfully!");
+      
+      // Redirect to login page after successful registration
+      router.push("/dashboard/login");
     } catch (error) {
       setError("Network error occurred");
-    } finally {
       setIsLoading(false);
     }
   }
@@ -92,7 +89,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
       {/* Left Side - Promotional Content */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-8 xl:p-12 relative overflow-hidden">
         {/* Background Effects */}
         <div className="absolute inset-0 bg-gradient-to-br from-[#0D3B66]/10 to-[#0D3B66]/5"></div>
         <div className="absolute top-1/4 -left-20 w-72 h-72 bg-[#0D3B66]/10 rounded-full blur-3xl"></div>
@@ -102,74 +99,74 @@ export default function RegisterPage() {
         {/* Header */}
         <div className="relative z-10">
           <div className="flex items-center space-x-3 mb-8">
-            <div className="w-12 h-12 bg-[#0D3B66] rounded-xl flex items-center justify-center shadow-lg shadow-[#0D3B66]/25">
-              <Mail className="w-6 h-6 text-white" />
+            <div className="w-10 h-10 xl:w-12 xl:h-12 bg-[#0D3B66] rounded-xl flex items-center justify-center shadow-lg shadow-[#0D3B66]/25">
+              <Mail className="w-5 h-5 xl:w-6 xl:h-6 text-white" />
             </div>
-            <span className="text-2xl font-bold text-[#0D3B66]">
+            <span className="text-2xl xl:text-2xl font-bold text-[#0D3B66]">
               VAIKET AI
             </span>
           </div>
 
-          <h1 className="text-5xl font-bold leading-tight mb-6 text-gray-800">
+          <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-6 text-gray-800">
             Transform Your
             <span className="text-[#0D3B66] block">
               Email Experience
             </span>
           </h1>
 
-          <p className="text-xl text-gray-600 mb-12 max-w-md leading-relaxed">
+          <p className="text-lg xl:text-xl text-gray-600 mb-8 xl:mb-12 max-w-md leading-relaxed">
             Intelligent email automation powered by advanced AI. Save time, increase productivity, and never miss important messages again.
           </p>
 
           {/* Features List */}
-          <div className="space-y-4 mb-12">
+          <div className="space-y-4 mb-8 xl:mb-12">
             {features.map((feature, index) => (
               <div key={index} className="flex items-center space-x-4 group hover:transform hover:translate-x-2 transition-transform duration-300">
-                <div className="w-12 h-12 bg-[#0D3B66]/10 rounded-xl flex items-center justify-center group-hover:bg-[#0D3B66]/20 transition-all duration-300 shadow-lg">
+                <div className="w-10 h-10 xl:w-12 xl:h-12 bg-[#0D3B66]/10 rounded-xl flex items-center justify-center group-hover:bg-[#0D3B66]/20 transition-all duration-300 shadow-lg">
                   <div className="text-[#0D3B66]">
                     {feature.icon}
                   </div>
                 </div>
-                <span className="text-gray-700 text-lg font-medium">{feature.text}</span>
+                <span className="text-gray-700 text-base xl:text-lg font-medium">{feature.text}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Stats */}
-        <div className="relative z-10 grid grid-cols-3 gap-8">
+        <div className="relative z-10 grid grid-cols-3 gap-6 xl:gap-8">
           <div className="text-center transform hover:scale-110 transition-transform duration-300">
-            <div className="text-2xl font-bold text-[#0D3B66]">98%</div>
-            <div className="text-gray-600 text-sm">Accuracy Rate</div>
+            <div className="text-xl xl:text-2xl font-bold text-[#0D3B66]">98%</div>
+            <div className="text-gray-600 text-xs xl:text-sm">Accuracy Rate</div>
           </div>
           <div className="text-center transform hover:scale-110 transition-transform duration-300">
-            <div className="text-2xl font-bold text-[#0D3B66]">10K+</div>
-            <div className="text-gray-600 text-sm">Active Users</div>
+            <div className="text-xl xl:text-2xl font-bold text-[#0D3B66]">10K+</div>
+            <div className="text-gray-600 text-xs xl:text-sm">Active Users</div>
           </div>
           <div className="text-center transform hover:scale-110 transition-transform duration-300">
-            <div className="text-2xl font-bold text-[#0D3B66]">24/7</div>
-            <div className="text-gray-600 text-sm">AI Support</div>
+            <div className="text-xl xl:text-2xl font-bold text-[#0D3B66]">24/7</div>
+            <div className="text-gray-600 text-xs xl:text-sm">AI Support</div>
           </div>
         </div>
       </div>
 
       {/* Right Side - Registration Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 lg:p-12">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-4 sm:p-6 lg:p-8 xl:p-12">
         <div className="w-full max-w-md">
           {/* Mobile Header */}
-          <div className="lg:hidden flex items-center justify-center space-x-3 mb-8">
-            <div className="w-12 h-12 bg-[#0D3B66] rounded-xl flex items-center justify-center shadow-lg">
-              <Mail className="w-6 h-6 text-white" />
+          <div className="lg:hidden flex items-center justify-center space-x-3 mb-6">
+            <div className="w-10 h-10 bg-[#0D3B66] rounded-xl flex items-center justify-center shadow-lg">
+              <Mail className="w-5 h-5 text-white" />
             </div>
-            <span className="text-2xl font-bold text-[#0D3B66]">
+            <span className="text-xl font-bold text-[#0D3B66]">
               VAIKET AI
             </span>
           </div>
 
           {/* Form Container */}
-          <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-8 lg:p-10 shadow-2xl shadow-[#0D3B66]/10">
+          <div className="bg-white rounded-2xl xl:rounded-3xl border border-gray-200 p-6 sm:p-8 lg:p-8 xl:p-10 shadow-2xl shadow-[#0D3B66]/10">
             {/* Header */}
-            <div className="text-center mb-8">
+            <div className="text-center mb-6">
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
                 Create Your Account
               </h1>
@@ -180,7 +177,7 @@ export default function RegisterPage() {
 
             {/* Google Sign Up */}
             <button className="w-full py-3 sm:py-4 bg-white border border-gray-300 hover:border-gray-400 rounded-2xl flex items-center justify-center space-x-3 font-semibold text-gray-700 transition-all duration-300 mb-6 group hover:shadow-lg">
-              <div className="w-5 h-5 bg-gradient-to-r from-red-400 to-yellow-400 rounded-full"></div>
+              <div className="w-4 h-4 sm:w-5 sm:h-5 bg-gradient-to-r from-red-400 to-yellow-400 rounded-full"></div>
               <span className="text-sm sm:text-base">Continue with Google</span>
               <Zap className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-gray-600" />
             </button>
@@ -193,19 +190,20 @@ export default function RegisterPage() {
             </div>
 
             {/* Form */}
-            <div className="space-y-4 sm:space-y-5">
+            <div className="space-y-4">
               {/* Full Name */}
               <div className="group">
                 <label className="text-sm font-medium text-gray-700 mb-2 block">Full Name</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <User className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
+                    <User className="h-4 w-4 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
                   </div>
                   <input
                     type="text"
-                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-4 py-3 sm:py-4 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm sm:text-base"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-4 py-3 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm"
                     placeholder="Enter your full name"
-                    onChange={(e) => setData({ ...data, fullName: e.target.value })}
+                    value={data.name}
+                    onChange={(e) => setData({ ...data, name: e.target.value })}
                   />
                 </div>
               </div>
@@ -215,12 +213,13 @@ export default function RegisterPage() {
                 <label className="text-sm font-medium text-gray-700 mb-2 block">Email Address</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
+                    <Mail className="h-4 w-4 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
                   </div>
                   <input
                     type="email"
-                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-4 py-3 sm:py-4 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm sm:text-base"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-4 py-3 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm"
                     placeholder="your@email.com"
+                    value={data.email}
                     onChange={(e) => setData({ ...data, email: e.target.value })}
                   />
                 </div>
@@ -231,12 +230,13 @@ export default function RegisterPage() {
                 <label className="text-sm font-medium text-gray-700 mb-2 block">Password</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
+                    <Lock className="h-4 w-4 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
                   </div>
                   <input
                     type={showPassword ? "text" : "password"}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-12 py-3 sm:py-4 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm sm:text-base"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-12 py-3 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm"
                     placeholder="Create a strong password"
+                    value={data.password}
                     onChange={(e) => {
                       setData({ ...data, password: e.target.value });
                       checkPasswordStrength(e.target.value);
@@ -248,9 +248,9 @@ export default function RegisterPage() {
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <EyeOff className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                      <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
                     ) : (
-                      <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                      <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600 transition-colors" />
                     )}
                   </button>
                 </div>
@@ -288,9 +288,7 @@ export default function RegisterPage() {
                     {passwordRequirements.map((req, index) => (
                       <div key={index} className="flex items-center space-x-2">
                         <CheckCircle 
-                          className={`h-3 w-3 sm:h-4 sm:w-4 ${
-                            req.met ? "text-green-500" : "text-gray-400"
-                          }`} 
+                          className={`h-3 w-3 ${req.met ? "text-green-500" : "text-gray-400"}`} 
                         />
                         <span className={`text-xs ${req.met ? "text-green-600" : "text-gray-500"}`}>
                           {req.text}
@@ -301,38 +299,28 @@ export default function RegisterPage() {
                 )}
               </div>
 
-              {/* Confirm Password */}
+              {/* Business Name */}
               <div className="group">
-                <label className="text-sm font-medium text-gray-700 mb-2 block">Confirm Password</label>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Business Name</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
+                    <Building className="h-4 w-4 text-gray-400 group-focus-within:text-[#0D3B66] transition-colors" />
                   </div>
                   <input
-                    type={showPassword2 ? "text" : "password"}
-                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-12 py-3 sm:py-4 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm sm:text-base"
-                    placeholder="Confirm your password"
-                    onChange={(e) => setData({ ...data, confirmPassword: e.target.value })}
+                    type="text"
+                    className="w-full bg-gray-50 border border-gray-300 rounded-2xl pl-10 pr-4 py-3 text-gray-800 placeholder-gray-500 focus:border-[#0D3B66] focus:ring-2 focus:ring-[#0D3B66]/20 transition-all duration-300 text-sm"
+                    placeholder="Your company name"
+                    value={data.business}
+                    onChange={(e) => setData({ ...data, business: e.target.value })}
                   />
-                  <button
-                    type="button"
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                    onClick={() => setShowPassword2(!showPassword2)}
-                  >
-                    {showPassword2 ? (
-                      <EyeOff className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                    ) : (
-                      <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600 transition-colors" />
-                    )}
-                  </button>
                 </div>
               </div>
 
               {/* Error Message */}
               {error && (
-                <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-2xl p-3 sm:p-4">
-                  <div className="w-4 h-4 sm:w-5 sm:h-5 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-red-500 rounded-full"></div>
+                <div className="flex items-center space-x-2 text-red-600 bg-red-50 border border-red-200 rounded-2xl p-3">
+                  <div className="w-4 h-4 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
                   </div>
                   <span className="text-sm">{error}</span>
                 </div>
@@ -340,19 +328,19 @@ export default function RegisterPage() {
 
               {/* Submit Button */}
               <button
-                onClick={handleSendOtp}
+                onClick={handleRegister}
                 disabled={isLoading}
-                className="w-full bg-[#0D3B66] hover:bg-[#0A2E4D] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 sm:py-4 px-6 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 shadow-lg shadow-[#0D3B66]/25"
+                className="w-full bg-[#0D3B66] hover:bg-[#0A2E4D] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-2 shadow-lg shadow-[#0D3B66]/25 mt-4"
               >
                 {isLoading ? (
                   <>
-                    <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
-                    <span className="text-sm sm:text-base">Creating Account...</span>
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                    <span className="text-sm">Creating Account...</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-sm sm:text-base">Create Account & Send OTP</span>
-                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
+                    <span className="text-sm">Create Account</span>
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </>
                 )}
               </button>
@@ -372,19 +360,19 @@ export default function RegisterPage() {
 
             {/* Login Link */}
             <div className="text-center mt-6 pt-6 border-t border-gray-200">
-              <p className="text-gray-600 text-sm sm:text-base">
+              <p className="text-gray-600 text-sm">
                 Already have an account?{" "}
                 <Link href="/dashboard/login" className="text-[#0D3B66] hover:text-[#0A2E4D] cursor-pointer font-semibold transition-colors inline-flex items-center gap-1 group">
                   Sign In
-                  <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </p>
             </div>
           </div>
 
           {/* Security Badge */}
-          <div className="flex items-center justify-center space-x-2 mt-6 text-gray-500 text-xs sm:text-sm">
-            <Shield className="w-3 h-3 sm:w-4 sm:h-4" />
+          <div className="flex items-center justify-center space-x-2 mt-6 text-gray-500 text-xs">
+            <Shield className="w-3 h-3" />
             <span>Enterprise-grade security & encryption</span>
           </div>
         </div>
