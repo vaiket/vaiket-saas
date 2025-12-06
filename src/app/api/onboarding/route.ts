@@ -5,7 +5,6 @@ import { cookies } from "next/headers";
 
 export async function POST(req: Request) {
   try {
-    // ✅ MUST AWAIT cookies() — fix TypeScript error
     const cookieStore = await cookies();
     const token = cookieStore.get("token")?.value;
 
@@ -29,16 +28,67 @@ export async function POST(req: Request) {
     const { userId, tenantId } = decoded;
 
     const body = await req.json();
-    const { phone, website, about, services, pricing, tone } = body;
+    const {
+      phone,
+      website,
+      about,
+      services,
+      pricing,
+      tone,
+      businessName,
+      // category // schema me abhi nahi hai, isliye ignore kar rahe
+    } = body;
 
-    // ✅ Create or update onboarding data
+    // 🟦 Save onboarding data for user+tenant
     await prisma.onboarding.upsert({
       where: { userId },
-      update: { phone, website, about, services, pricing, tone },
-      create: { userId, tenantId, phone, website, about, services, pricing, tone },
+      update: {
+        phone,
+        website,
+        about,
+        services,
+        pricing,
+        tone,
+        businessName,
+      },
+      create: {
+        userId,
+        tenantId,
+        phone,
+        website,
+        about,
+        services,
+        pricing,
+        tone,
+        businessName,
+      },
     });
 
-    // ✅ Mark onboarding complete
+    // 🟦 Update tenant name with businessName (so AI ko proper naam mile)
+    if (businessName) {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: {
+          name: businessName,
+        },
+      });
+    }
+
+    // 🟦 Update AI tone in tenant settings
+    await prisma.tenantSettings.upsert({
+      where: { tenantId },
+      update: {
+        tone: tone || "professional",
+        aiMode: tone || "professional",
+      },
+      create: {
+        tenantId,
+        tone: tone || "professional",
+        aiMode: tone || "professional",
+      },
+    });
+
+    // 🟦 Mark onboarding as completed for this user
     await prisma.user.update({
       where: { id: userId },
       data: { onboardingCompleted: true },

@@ -67,7 +67,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/onboarding/complete");
 
     } catch (err) {
       alert("Something went wrong!");

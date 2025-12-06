@@ -1,130 +1,104 @@
-// src/app/api/auth/google/callback/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
-async function getUserFromRequest(req: NextRequest) {
-  const token = req.cookies.get("token")?.value;
-  if (!token) return null;
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!) as any;
-  } catch {
-    return null;
-  }
-}
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const code = url.searchParams.get("code");
 
-export async function GET(req: NextRequest) {
-  const code = req.nextUrl.searchParams.get("code");
   if (!code) {
-    return NextResponse.json({ error: "Missing code" }, { status: 400 });
+    return NextResponse.redirect("/login");
   }
 
-  const clientId = process.env.GOOGLE_CLIENT_ID!;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI!;
-
-  // Exchange authorization code for tokens
+  // 1) Code -> Tokens
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/google/callback`,
       grant_type: "authorization_code",
     }),
   });
 
   const tokenJson = await tokenRes.json();
   if (!tokenRes.ok) {
-    console.error("Token exchange error:", tokenJson);
-    return NextResponse.redirect(
-      new URL("/dashboard/mail-accounts?error=oauth_failed", req.url)
-    );
+    console.error("Google token error:", tokenJson);
+    return NextResponse.redirect("/login?error=google_token");
   }
 
-  const { access_token, refresh_token, expires_in } = tokenJson;
-
-  // Fetch Google user info (email)
-  const uiRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-    headers: { Authorization: `Bearer ${access_token}` },
+  // 2) Token -> User profile
+  const profileRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${tokenJson.access_token}` },
   });
-  const userInfo = await uiRes.json();
-  const email = userInfo.email;
-  const name = userInfo.name || email;
+
+  const profile = await profileRes.json();
+  const email = profile.email as string;
+  const name = (profile.name as string) || email.split("@")[0];
+  const avatarUrl = profile.picture as string | undefined;
 
   if (!email) {
-    return NextResponse.redirect(
-      new URL("/dashboard/mail-accounts?error=no_email", req.url)
-    );
+    return NextResponse.redirect("/login?error=no_email");
   }
 
-  // Logged-in tenant & user
-  const session = await getUserFromRequest(req);
-  const tenantId = session?.tenantId ?? null;
-
-  // ✅ Check if MailAccount already exists
-  const existing = await prisma.mailAccount.findFirst({
-    where: { email, tenantId },
+  // 3) Check if user already exists
+  let user = await prisma.user.findUnique({
+    where: { email },
+    include: { tenant: true },
   });
 
-  if (existing) {
-    // ✅ Update existing Gmail account
-    await prisma.mailAccount.update({
-      where: { id: existing.id },
+  // 4) If not exists -> create tenant + user
+  if (!user) {
+    // 4a) Create tenant
+    const tenant = await prisma.tenant.create({
       data: {
-        name: `${name} (Gmail)`,
-        provider: "gmail",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: email,
-        smtpPass: "",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: email,
-        imapPass: "",
-        active: true,
-        oauthProvider: "google",
-        oauthAccessToken: access_token,
-        oauthRefreshToken: refresh_token ?? undefined,
-        oauthExpiresAt: expires_in
-          ? new Date(Date.now() + Number(expires_in) * 1000)
-          : undefined,
+        name: `${name}'s Workspace`,
+        // country, timezone can be null or you can infer later
       },
     });
-  } else {
-    // ✅ Create new Gmail MailAccount
-    await prisma.mailAccount.create({
+
+    // 4b) Fake random password (we never use it for google login)
+    const randomPassword = crypto.randomUUID();
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+    // 4c) Create user
+    user = await prisma.user.create({
       data: {
-        tenantId,
-        name: `${name} (Gmail)`,
+        tenantId: tenant.id,
+        name,
         email,
-        provider: "gmail",
-        smtpHost: "smtp.gmail.com",
-        smtpPort: 465,
-        smtpSecure: true,
-        smtpUser: email,
-        smtpPass: "",
-        imapHost: "imap.gmail.com",
-        imapPort: 993,
-        imapSecure: true,
-        imapUser: email,
-        imapPass: "",
-        active: true,
-        oauthProvider: "google",
-        oauthAccessToken: access_token,
-        oauthRefreshToken: refresh_token ?? null,
-        oauthExpiresAt: expires_in
-          ? new Date(Date.now() + Number(expires_in) * 1000)
-          : null,
+        profileImage: avatarUrl,
+        role: "owner",       // ya "admin" / "user" jaisa tumhara system hai
+        password: hashedPassword,
+      },
+      include: { tenant: true },
+    });
+
+    // (optional) TenantSettings default row
+    await prisma.tenantSettings.create({
+      data: {
+        tenantId: tenant.id,
+        // baaki fields default se aa jayenge
       },
     });
   }
 
-  return NextResponse.redirect(
-    new URL("/dashboard/mail-accounts?connected=1", req.url)
-  );
+  // 5) Create session (use your existing session logic)
+  // Example placeholder:
+  // const response = NextResponse.redirect("/dashboard");
+  // await createSessionCookie(response, { userId: user.id, tenantId: user.tenantId });
+
+  const response = NextResponse.redirect("/dashboard");
+  // TODO: yaha apna real session cookie helper call karo
+  response.cookies.set("session_user_id", String(user.id), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+
+  return response;
 }

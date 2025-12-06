@@ -2,37 +2,38 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import jwt from "jsonwebtoken";
 
-// ⭐ Next.js 16 REQUIRED function:
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // PUBLIC ROUTES
+  // PUBLIC ROUTES (no login required)
   const publicRoutes = [
+    "/",
+    "/pricing",            // ← ADDED 
     "/login",
     "/register",
     "/api/auth/login",
     "/api/auth/register",
     "/favicon.ico",
-    "/",
   ];
 
+  // Allow static files
   const publicPrefixes = [
     "/_next",
     "/static",
-    "/public",
     "/assets",
+    "/public",
     "/.well-known",
   ];
 
-  // Allow public pages
+  // Allow if path is PUBLIC
   if (
     publicRoutes.includes(pathname) ||
-    publicPrefixes.some((p) => pathname.startsWith(p))
+    publicPrefixes.some(p => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
-  // Check JWT cookie
+  // Protected routes → require JWT
   const token = req.cookies.get("token")?.value;
 
   if (!token) {
@@ -42,12 +43,12 @@ export function proxy(req: NextRequest) {
   try {
     jwt.verify(token, process.env.JWT_SECRET!);
     return NextResponse.next();
-  } catch (err) {
+  } catch {
     return NextResponse.redirect(new URL("/login", req.url));
   }
 }
 
-// ⭐ Required matcher
+// Match only dashboard paths for auth
 export const config = {
   matcher: ["/dashboard/:path*"],
 };

@@ -8,38 +8,38 @@ datasource db {
 }
 
 model Tenant {
-  id              Int              @id @default(autoincrement())
-  name            String
-  country         String?
-  timezone        String?
-  createdAt       DateTime         @default(now())
-  customers       Customer[]
-  incomingEmails  IncomingEmail[]
-  mailAccounts    MailAccount[]
-  onboarding      Onboarding[]
-  smtpCredentials SmtpCredentials?
-  apiKeys         TenantApiKey[]
-  settings        TenantSettings?
-  users           User[]
+  id                Int                @id @default(autoincrement())
+  name              String
+  country           String?
+  timezone          String?
+  createdAt         DateTime           @default(now())
+  autoReplyRules    AutoReplyRule[]
+  customers         Customer[]
+  incomingEmails    IncomingEmail[]
+  mailAccounts      MailAccount[]
+  mailLogs          MailLog[]
+  onboarding        Onboarding[]
+  smtpCredentials   SmtpCredentials?
+  apiKeys           TenantApiKey[]
+  settings          TenantSettings?
+  users             User[]
   userSubscriptions UserSubscription[]
-
 }
 
 model User {
-  id                  Int         @id @default(autoincrement())
+  id                  Int                @id @default(autoincrement())
   tenantId            Int
   name                String
-  email               String      @unique
+  email               String             @unique
   mobile              String?
   password            String
   role                String
-  createdAt           DateTime    @default(now())
-  onboardingCompleted Boolean     @default(false)
+  createdAt           DateTime           @default(now())
+  onboardingCompleted Boolean            @default(false)
   profileImage        String?
   onboarding          Onboarding?
-  tenant              Tenant      @relation(fields: [tenantId], references: [id])
-  userSubscriptions UserSubscription[]
-
+  tenant              Tenant             @relation(fields: [tenantId], references: [id])
+  userSubscriptions   UserSubscription[]
 }
 
 model TenantSettings {
@@ -113,27 +113,30 @@ model MailAccount {
   oauthRefreshToken String?
   authType          String          @default("password")
   oauthExpiry       DateTime?
+  oauthExpiresAt    DateTime?
+  oauthProvider     String?
+  signature         String?
   IncomingEmail     IncomingEmail[]
   tenant            Tenant          @relation(fields: [tenantId], references: [id])
-  oauthProvider     String?
-  oauthExpiresAt    DateTime?
-
-
   MailLogs          MailLog[]
 }
 
 model MailLog {
-  id            Int         @id @default(autoincrement())
+  id            Int            @id @default(autoincrement())
   mailAccountId Int
-  type          String
   to            String?
   from          String?
   subject       String?
   body          String?
   status        String?
   error         String?
-  createdAt     DateTime    @default(now())
-  mailAccount   MailAccount @relation(fields: [mailAccountId], references: [id])
+  createdAt     DateTime       @default(now())
+  replyToId     Int?
+  tenantId      Int?
+  type          String?        @default("unknown")
+  mailAccount   MailAccount    @relation(fields: [mailAccountId], references: [id])
+  incomingEmail IncomingEmail? @relation("IncomingToLog", fields: [replyToId], references: [id])
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id])
 }
 
 model IncomingEmail {
@@ -150,8 +153,13 @@ model IncomingEmail {
   messageId     String?
   status        String?     @default("pending")
   tenantId      Int
+  intent        String?
+  priority      Int?
+  sentiment     String?
+  threadId      String?
   mailAccount   MailAccount @relation(fields: [mailAccountId], references: [id])
   tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  MailLogs      MailLog[]   @relation("IncomingToLog")
 }
 
 model Lead {
@@ -210,70 +218,96 @@ model OtpRequest {
 }
 
 model SubscriptionPlan {
-  id          Int     @id @default(autoincrement())
-  key         String  @unique    // "starter", "growth", "business"
-  title       String
-  priceMonth  Int
-  priceYear   Int?
-  features    String?            // JSON or comma list
-  createdAt   DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  key        String   @unique
+  title      String
+  priceMonth Int
+  priceYear  Int?
+  features   String?
+  createdAt  DateTime @default(now())
 }
 
 model UserSubscription {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   userId       Int
   tenantId     Int
   planKey      String
-  status       String   // "pending", "active", "cancelled", "expired"
+  status       String
+  billingCycle String    @default("monthly")
   startedAt    DateTime?
   endsAt       DateTime?
-  paymentRef   String?  // external payment reference
+  paymentRef   String?
+  amountPaid   Int?
   createdAt    DateTime @default(now())
 
-  user   User   @relation(fields: [userId], references: [id])
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+
+  invoices Invoice[] @relation("SubInvoices")
 }
 
 model PaymentLog {
-  id           Int      @id @default(autoincrement())
-  tenantId     Int
-  userId       Int?
-  provider     String   // "phonepe"
-  providerRef  String?  // phonepe txn id
-  amount       Int
-  currency     String   @default("INR")
-  status       String   // "initiated", "success", "failed", "refunded"
-  meta         Json?
-  createdAt    DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  userId      Int?
+  provider    String
+  providerRef String?
+  amount      Int
+  currency    String   @default("INR")
+  status      String
+  meta        Json?
+  createdAt   DateTime @default(now())
 }
-
 
 model Payment {
-  id         Int      @id @default(autoincrement())
-  txnid      String   @unique
-  tenantId   Int?     // optional - link to tenant if you have multi-tenant
-  userId     Int?     // optional - link to user if logged in
-  amount     Int      // amount in paise (e.g., ₹999 -> 99900)
-  product    String?
-  status     String   // INITIATED | SUCCESS | FAILURE
-  raw        Json?    // optional: raw response payload
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  txnid     String   @unique
+  tenantId  Int?
+  userId    Int?
+  amount    Int
+  product   String?
+  status    String
+  raw       Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-
-
 model transactions {
-  id           BigInt   @id @default(autoincrement())
-  user_id      BigInt?
-  tenant_id    BigInt?
-  plan_key     String
-  amount       Int
-  status       String
-  payu_txn_id  String?
+  id            BigInt   @id @default(autoincrement())
+  user_id       BigInt?
+  tenant_id     BigInt?
+  plan_key      String
+  amount        Int
+  status        String
+  payu_txn_id   String?
   payu_order_id String?
-  created_at   DateTime @default(now())
-  updated_at   DateTime @updatedAt
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
   @@map("transactions")
+}
+
+model AutoReplyRule {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  keyword   String
+  replyText String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  priority  Int      @default(1)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Invoice {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  tenantId    Int
+  subId       Int
+  amount      Int
+  paid        Boolean   @default(true)
+  pdfUrl      String?
+  createdAt   DateTime  @default(now())
+
+  subscription UserSubscription @relation("SubInvoices", fields: [subId], references: [id])
 }
