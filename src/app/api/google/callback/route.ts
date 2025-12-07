@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+
 
 export async function GET(req: Request) {
   try {
