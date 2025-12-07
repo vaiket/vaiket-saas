@@ -1,69 +1,64 @@
-import { PrismaClient } from "@prisma/client";
-import { google } from "googleapis";
 import { NextResponse } from "next/server";
-
-const prisma = new PrismaClient();
-
-// Static tenant for now — will attach real logged-in tenant later
-const TENANT_ID = 1;
+import { google } from "googleapis";
+import prisma from "@/lib/prisma";
 
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
 
-    if (!code) return NextResponse.json({ error: "No code provided" }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: "Missing authorization code" }, { status: 400 });
+    }
+
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI!;
+    console.log("CALLBACK REDIRECT URI:", redirectUri);
 
     const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID!,
-      process.env.GOOGLE_CLIENT_SECRET!,
-      process.env.GOOGLE_REDIRECT_URI!,
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
     );
 
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
 
-    const userInfo = await google.oauth2("v2").userinfo.get({ auth: oauth2Client });
-
-    const email = userInfo.data.email;
-    if (!email) return NextResponse.json({ error: "No email provided" }, { status: 400 });
-
     const accessToken = tokens.access_token!;
-    const refreshToken = tokens.refresh_token ?? null;
+    const refreshToken = tokens.refresh_token!;
+    const expiresAt = tokens.expiry_date ? new Date(tokens.expiry_date) : null;
 
-    const expiresIn = (tokens as any).expiry_date
-      ? Math.floor(((tokens as any).expiry_date - Date.now()) / 1000)
-      : (tokens as any).expires_in ?? 3600;
+    // Fetch Gmail user profile
+    const gmail = google.oauth2({ auth: oauth2Client, version: "v2" });
+    const { data } = await gmail.userinfo.get();
+    const email = data.email!;
 
-    const expiresAt = new Date(Date.now() + expiresIn * 1000);
+    console.log("Connected Gmail:", email);
 
-    // Save Gmail OAuth credentials in DB (Multi-tenant)
+    // TODO: get tenant dynamically — now using default=1
+    const tenantId = 1;
+
+    // Save Gmail account into DB
     await prisma.gmailAccount.upsert({
       where: { email },
       update: {
         accessToken,
         refreshToken,
-        expiresAt,
-        updatedAt: new Date(),
+        expiresAt
       },
       create: {
         email,
         accessToken,
         refreshToken,
         expiresAt,
-        tenantId: TENANT_ID,
-      },
+        tenantId
+      }
     });
 
-    console.log("Gmail Connected:", email);
+    console.log("Saved Gmail Account Successfully!");
 
-    return NextResponse.redirect(
-      "https://ai.vaiket.com/settings/email?connected=1"
-    );
-  } catch (error) {
-    console.error("OAuth Error:", error);
-    return NextResponse.redirect(
-      "https://ai.vaiket.com/settings/email?error=1"
-    );
+    return NextResponse.redirect("https://ai.vaiket.com/success?email=" + email);
+  } catch (err: any) {
+    console.error("OAuth callback error:", err);
+    return NextResponse.redirect("https://ai.vaiket.com/error?reason=" + err.message);
   }
 }
