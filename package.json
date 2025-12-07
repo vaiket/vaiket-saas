@@ -36,6 +36,7 @@
     "dotenv": "^17.2.3",
     "framer-motion": "^12.23.24",
     "get-stream": "^9.0.1",
+    "googleapis": "^167.0.0",
     "imap": "^0.8.19",
     "imap-simple": "^5.1.0",
     "imapflow": "^1.1.1",
