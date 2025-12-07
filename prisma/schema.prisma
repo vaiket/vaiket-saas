@@ -15,6 +15,7 @@ model Tenant {
   createdAt         DateTime           @default(now())
   autoReplyRules    AutoReplyRule[]
   customers         Customer[]
+  gmailAccounts     GmailAccount[]
   incomingEmails    IncomingEmail[]
   mailAccounts      MailAccount[]
   mailLogs          MailLog[]
@@ -233,17 +234,15 @@ model UserSubscription {
   tenantId     Int
   planKey      String
   status       String
-  billingCycle String    @default("monthly")
   startedAt    DateTime?
   endsAt       DateTime?
   paymentRef   String?
+  createdAt    DateTime  @default(now())
+  billingCycle String    @default("monthly")
   amountPaid   Int?
-  createdAt    DateTime @default(now())
-
-  user     User     @relation(fields: [userId], references: [id])
-  tenant   Tenant   @relation(fields: [tenantId], references: [id])
-
-  invoices Invoice[] @relation("SubInvoices")
+  invoices     Invoice[] @relation("SubInvoices")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
 }
 
 model PaymentLog {
@@ -300,14 +299,26 @@ model AutoReplyRule {
 }
 
 model Invoice {
-  id          Int       @id @default(autoincrement())
-  userId      Int
-  tenantId    Int
-  subId       Int
-  amount      Int
-  paid        Boolean   @default(true)
-  pdfUrl      String?
-  createdAt   DateTime  @default(now())
+  id            Int              @id @default(autoincrement())
+  userId        Int
+  tenantId      Int
+  subId         Int
+  amount        Int
+  paid          Boolean          @default(true)
+  pdfUrl        String?
+  createdAt     DateTime         @default(now())
+  invoiceNumber String?          @unique
+  subscription  UserSubscription @relation("SubInvoices", fields: [subId], references: [id])
+}
 
-  subscription UserSubscription @relation("SubInvoices", fields: [subId], references: [id])
+model GmailAccount {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime @db.Timestamptz(6)
+  tenantId     Int
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
