@@ -335,16 +335,14 @@ model TenantSubscription {
 }
 
 model TenantMailbox {
-  id       Int @id @default(autoincrement())
-  tenantId Int @map("tenantId")
-
-  email    String @unique
-  username String
-  domain   String
-
-  mailcowId String?
-  quotaMB   Int?     @default(1024)
-  active    Boolean? @default(true)
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  email      String    @unique
+  username   String
+  domain     String
+  mailcowId  String?
+  quotaMB    Int?      @default(1024)
+  active     Boolean?  @default(true)
 
   imapHost   String
   imapPort   Int
@@ -354,34 +352,52 @@ model TenantMailbox {
   smtpPort   Int
   smtpSecure Boolean
 
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   dnsRecords MailboxDNS[]
 
-  @@map("TenantMailbox") // 🔥 THIS IS THE KEY
+  @@map("mailboxes")
+}
+
+
+
+model Mailbox {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  domain           String
+  email            String
+  connectionStatus String   @default("pending") @map("connection_status")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  dnsRecords       MailboxDNS[]
+
+  @@map("mailboxes")
 }
 
 model MailboxDNS {
-  id        Int    @id @default(autoincrement())
-  tenantId  Int    @map("tenant_id")
-  mailboxId Int    @map("mailbox_id")
-  domain    String
+  id          Int      @id @default(autoincrement())
 
-  spfHost    String @map("spf_host")
-  spfValue   String @map("spf_value")
-  dkimHost   String @map("dkim_host")
-  dkimValue  String @map("dkim_value")
-  dmarcHost  String @map("dmarc_host")
-  dmarcValue String @map("dmarc_value")
+  tenantId    Int      @map("tenant_id")
+  mailboxId   Int      @map("mailbox_id")
+  domain      String
 
-  spfStatus   String @default("pending") @map("spf_status")
-  dkimStatus  String @default("pending") @map("dkim_status")
-  dmarcStatus String @default("pending") @map("dmarc_status")
+  spfHost     String   @map("spf_host")
+  spfValue    String   @map("spf_value")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  dkimHost    String   @map("dkim_host")
+  dkimValue   String   @map("dkim_value")
 
-  mailbox TenantMailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+  dmarcHost   String   @map("dmarc_host")
+  dmarcValue  String   @map("dmarc_value")
+
+  spfStatus   String   @default("pending") @map("spf_status")
+  dkimStatus  String   @default("pending") @map("dkim_status")
+  dmarcStatus String   @default("pending") @map("dmarc_status")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  mailbox     TenantMailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
 
   @@map("mailbox_dns")
 }

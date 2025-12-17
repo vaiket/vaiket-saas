@@ -48,7 +48,7 @@ const icons: { [key: string]: React.ReactNode } = {
 
 const menu = [
   { name: "Overview", path: "/dashboard" },
-  { name: "Connect", path: "/dashboard/connect" },
+  { name: "Connect", path: "/dashboard/email-management" },
   { name: "Mail Accounts", path: "/dashboard/mail-accounts" },
   { name: "Mail Inbox", path: "/dashboard/mail-inbox" },
   { name: "AI Settings", path: "/dashboard/ai-settings" },

@@ -35,7 +35,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-  ],
+, "src/app/api/mail/create/route.1ts"  ],
   "exclude": [
     "node_modules",
     ".next",
