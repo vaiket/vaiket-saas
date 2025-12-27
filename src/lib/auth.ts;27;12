@@ -1,10 +1,9 @@
+// src/lib/auth.ts
 import jwt from "jsonwebtoken";
-import { cookies } from "next/headers";
-import { prisma } from "./prisma";
 
-// 🔹 Already existing
 export function getTokenData(req: any) {
   try {
+    // Next.js app route request has headers.get
     const cookie = req?.headers?.get?.("cookie") || req?.headers?.cookie || "";
     const match = cookie.match(/token=([^;]+)/);
     if (!match) return null;
@@ -17,21 +16,7 @@ export function getTokenData(req: any) {
       tenantId: decoded.tenantId,
       email: decoded.email,
     };
-  } catch {
+  } catch (e) {
     return null;
   }
-}
-
-// ✅ ADD THIS (IMPORTANT)
-export async function getAuthUser() {
-  const cookieStore = cookies();
-  const token = cookieStore.get("token")?.value;
-
-  if (!token) return null;
-
-  const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
-
-  return await prisma.user.findUnique({
-    where: { id: decoded.userId },
-  });
 }
