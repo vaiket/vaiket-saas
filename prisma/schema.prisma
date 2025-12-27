@@ -8,11 +8,11 @@ datasource db {
 }
 
 model Tenant {
-  id                Int                @id @default(autoincrement())
+  id                Int                  @id @default(autoincrement())
   name              String
   country           String?
   timezone          String?
-  createdAt         DateTime           @default(now())
+  createdAt         DateTime             @default(now())
   autoReplyRules    AutoReplyRule[]
   customers         Customer[]
   gmailAccounts     GmailAccount[]
@@ -25,6 +25,7 @@ model Tenant {
   settings          TenantSettings?
   users             User[]
   userSubscriptions UserSubscription[]
+  projects          ProjectAutoProject[]
 }
 
 model User {
@@ -263,13 +264,14 @@ model Payment {
   txnid     String   @unique
   tenantId  Int?
   userId    Int?
+  product   String?      // e.g. BASIC_999
   amount    Int
-  product   String?
-  status    String
-  raw       Json?
+  status    String       // CREATED | SUCCESS | FAILED
+  raw       Json?        // optional: gateway response
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 
 model transactions {
   id            BigInt   @id @default(autoincrement())
@@ -357,6 +359,7 @@ model TenantMailbox {
   createdAt DateTime @default(now())
 
   dnsRecords MailboxDNS[]
+  automation TenantMailboxAutomation?
 
   @@map("TenantMailbox") // 🔥 THIS IS THE KEY
 }
@@ -364,7 +367,7 @@ model TenantMailbox {
 model MailboxDNS {
   id        Int    @id @default(autoincrement())
   tenantId  Int    @map("tenant_id")
-  mailboxId Int    @map("mailbox_id")
+  mailboxId Int    @unique @map("mailbox_id")
   domain    String
 
   spfHost    String @map("spf_host")
@@ -384,4 +387,220 @@ model MailboxDNS {
   mailbox TenantMailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
 
   @@map("mailbox_dns")
+}
+
+model TenantMailboxAutomation {
+  id Int @id @default(autoincrement())
+
+  tenantMailboxId Int @unique
+  tenantId        Int
+
+  // Encrypted mailbox password (IMAP + SMTP)
+  encryptedPassword String
+
+  // Automation toggle from dashboard
+  automationEnabled Boolean @default(true)
+
+  // APPROVED | DISABLED | SUSPENDED
+  status MailboxAutomationStatus @default(APPROVED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relation (single-line to avoid Prisma parser issues)
+  tenantMailbox TenantMailbox @relation(fields: [tenantMailboxId], references: [id])
+
+  @@map("TenantMailboxAutomation")
+}
+
+enum MailboxAutomationStatus {
+  APPROVED
+  DISABLED
+  SUSPENDED
+
+  @@map("mailbox_automation_status")
+}
+
+/// ===============================
+/// ENUMS (SAFE & STRICT)
+/// ===============================
+
+enum ProjectAutoStatus {
+  DRAFT
+  CONFIGURED
+  RUNNING
+  PAUSED
+  STOPPED
+}
+
+enum IncomingMailStatus {
+  PENDING
+  REJECTED
+  PROCESSING
+  SUCCESS
+}
+
+enum OutgoingMailStatus {
+  SENDING
+  SUCCESS
+  FAILED
+}
+
+enum AiLogStatus {
+  SUCCESS
+  FAILED
+}
+
+/// ===============================
+/// PROJECT (ROOT OF AUTOMATION)
+/// ===============================
+
+model ProjectAutoProject {
+  id          Int               @id @default(autoincrement())
+  tenantId    Int
+  projectCode String            @unique
+  name        String
+  status String @default("DRAFT")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  branding ProjectAutoBranding?
+  mailbox  ProjectAutoMailbox?
+  incoming ProjectAutoIncomingMail[]
+  outgoing ProjectAutoOutgoingMail[]
+  aiLogs   ProjectAutoAiLog[]
+  config ProjectAutoConfig?
+
+}
+
+/// ===============================
+/// EMAIL BRANDING (PROJECT LEVEL)
+/// ===============================
+
+model ProjectAutoBranding {
+  id        Int @id @default(autoincrement())
+  projectId Int @unique
+  tenantId  Int
+
+  templateKey   String
+  companyName   String
+  senderName    String
+  businessEmail String
+  phoneNumber   String
+  website       String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Relations
+  project ProjectAutoProject @relation(fields: [projectId], references: [id])
+}
+
+/// ===============================
+/// PROJECT ↔ MAILBOX MAPPING
+/// ===============================
+
+model ProjectAutoMailbox {
+  id              Int @id @default(autoincrement())
+  projectId       Int @unique
+  tenantId        Int
+  tenantMailboxId Int
+
+  createdAt DateTime @default(now())
+
+  /// Relations
+  project ProjectAutoProject @relation(fields: [projectId], references: [id])
+}
+
+/// ===============================
+/// IMAP INCOMING MAILS (PROJECT SCOPED)
+/// ===============================
+
+model ProjectAutoIncomingMail {
+  id        Int @id @default(autoincrement())
+  projectId Int
+  tenantId  Int
+  mailboxId Int
+
+  fromEmail String
+  subject   String?
+  body      String
+  messageId String
+
+  status     IncomingMailStatus @default(PENDING)
+  receivedAt DateTime
+  createdAt  DateTime           @default(now())
+
+  /// Relations
+  project  ProjectAutoProject       @relation(fields: [projectId], references: [id])
+  outgoing ProjectAutoOutgoingMail?
+  aiLogs   ProjectAutoAiLog[]
+}
+
+/// ===============================
+/// SMTP OUTGOING MAILS
+/// ===============================
+
+model ProjectAutoOutgoingMail {
+  id             Int @id @default(autoincrement())
+  projectId      Int
+  tenantId       Int
+  incomingMailId Int @unique
+
+  toEmail    String
+  subject    String
+  bodyHtml   String
+  smtpStatus OutgoingMailStatus @default(SENDING)
+
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  /// Relations
+  project      ProjectAutoProject      @relation(fields: [projectId], references: [id])
+  incomingMail ProjectAutoIncomingMail @relation(fields: [incomingMailId], references: [id])
+}
+
+/// ===============================
+/// AI LOGS (AUDIT + DEBUG)
+/// ===============================
+
+model ProjectAutoAiLog {
+  id             Int @id @default(autoincrement())
+  projectId      Int
+  incomingMailId Int
+
+  aiModel  String
+  prompt   String
+  response String
+  status   AiLogStatus
+
+  createdAt DateTime @default(now())
+
+  /// Relations
+  project      ProjectAutoProject      @relation(fields: [projectId], references: [id])
+  incomingMail ProjectAutoIncomingMail @relation(fields: [incomingMailId], references: [id])
+}
+
+
+model ProjectAutoConfig {
+  id                Int      @id @default(autoincrement())
+  projectId         Int      @unique
+  tenantId          Int
+  mailboxEmail      String?
+  purpose           String?
+  replyTone         String?
+  replyLength       String?
+  automationEnabled Boolean  @default(false)
+  onboardingContext String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ProjectAutoProject ProjectAutoProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }

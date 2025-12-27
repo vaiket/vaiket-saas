@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password, business } = await req.json();
+    const body = await req.json();
+    const { name, email, password, business } = body;
 
     if (!name || !email || !password || !business) {
-      return NextResponse.json(
-        { success: false, error: "Missing fields" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
 
     // ✅ Check if user already exists
@@ -21,7 +18,7 @@ export async function POST(req: Request) {
 
     if (existing) {
       return NextResponse.json(
-        { success: false, error: "Email already exists" },
+        { error: "Email already exists" },
         { status: 409 }
       );
     }
@@ -45,51 +42,28 @@ export async function POST(req: Request) {
         email,
         password: hashed,
         role: "admin",
-        onboardingCompleted: false, // 🔑 VERY IMPORTANT
       },
     });
 
-    // ✅ 3. Default tenant AI settings
+    // ✅ 3. Create default tenant AI settings
     await prisma.tenantSettings.create({
       data: {
         tenantId: tenant.id,
         aiPrimary: "deepseek",
         aiFallback: "gemini,chatgpt",
-        aiMode: "draft",
+        aiMode: "draft", // ✅ FIXED — use correct Prisma field
       },
     });
 
-    // ✅ 4. CREATE JWT TOKEN (same style as login)
-    const token = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        tenantId: user.tenantId,
-      },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
-
-    // ✅ 5. SET COOKIE (IDENTICAL to login)
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
-      onboardingCompleted: user.onboardingCompleted,
+      tenantId: tenant.id,
+      userId: user.id,
     });
-
-    response.cookies.set("token", token, {
-      httpOnly: true,
-      secure: false,           // localhost safe
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7,
-    });
-
-    return response;
-
   } catch (err) {
-    console.error("Register Error:", err);
+    console.error(err);
     return NextResponse.json(
-      { success: false, error: "Server Error" },
+      { error: "Server Error" },
       { status: 500 }
     );
   }

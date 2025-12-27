@@ -52,7 +52,6 @@ export default function RegisterPage() {
     }
 
     try {
-      // 1️⃣ REGISTER
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,29 +59,20 @@ export default function RegisterPage() {
       });
 
       const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        setError(json.error || "Registration failed");
+      
+      if (!res.ok) {
+        setError(json.error || "Something went wrong");
         setIsLoading(false);
         return;
       }
 
-      // 2️⃣ FETCH AUTH CONTEXT (cookie already set)
-      const meRes = await fetch("/api/auth/me");
-      const meData = await meRes.json();
-
-      if (meData.success) {
-        if (!meData.user.onboardingCompleted) {
-          router.push("/onboarding");
-        } else {
-          router.push("/dashboard");
-        }
-      } else {
-        setError("Authentication failed");
-      }
-    } catch (err) {
+      // Success animation before redirect
+      setTimeout(() => {
+        router.push("/login");
+      }, 1500);
+      
+    } catch (error) {
       setError("Network error occurred");
-    } finally {
       setIsLoading(false);
     }
   }

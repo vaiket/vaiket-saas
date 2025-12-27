@@ -1,20 +1,12 @@
 "use client";
 
+import { useState } from "react";
+
 type DnsRecord = {
   id: number;
-  domain: string;
-
-  spfHost: string;
-  spfValue: string;
-  spfStatus: string;
-
   dkimHost: string;
   dkimValue: string;
   dkimStatus: string;
-
-  dmarcHost: string;
-  dmarcValue: string;
-  dmarcStatus: string;
 };
 
 export default function DnsStatusCard({
@@ -24,98 +16,73 @@ export default function DnsStatusCard({
   dns: DnsRecord[];
   loading: boolean;
 }) {
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   if (loading) {
-    return (
-      <div className="border rounded-lg p-5">
-        <h3 className="font-semibold mb-1">DNS Records</h3>
-        <p className="text-sm text-gray-500">Loading DNS records…</p>
-      </div>
-    );
+    return <div className="border rounded-lg p-5">Loading DNS…</div>;
   }
 
-  if (!Array.isArray(dns) || dns.length === 0) {
-    return (
-      <div className="border rounded-lg p-5">
-        <h3 className="font-semibold mb-1">DNS Records</h3>
-        <p className="text-sm text-gray-500">
-          DNS records not available yet.
-        </p>
-      </div>
-    );
-  }
+  const record = dns?.[0];
 
-  const record = dns[0];
+  const isVerified = record?.dkimStatus === "verified";
 
-  const Status = ({ status }: { status: string }) => (
-    <span
-      className={`text-xs font-medium px-2 py-1 rounded ${
-        status === "verified"
-          ? "bg-green-100 text-green-700"
-          : "bg-yellow-100 text-yellow-700"
-      }`}
-    >
-      {status}
-    </span>
-  );
+  const fetchDkim = async () => {
+    try {
+      setVerifying(true);
+      setError(null);
+
+      const res = await fetch("/api/mail-automation/fetch-dkim", {
+        method: "POST",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed");
+      }
+
+      window.location.reload();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   return (
-    <div className="border rounded-lg p-5 space-y-4">
-      <h3 className="font-semibold">DNS Records</h3>
-      <p className="text-sm text-gray-500">
-        Add these DNS records to your domain provider.
-      </p>
+    <div className="border rounded-lg p-5 space-y-3">
+      <h3 className="font-semibold">DKIM Record</h3>
 
-      {/* SPF */}
-      <div className="border rounded-md p-3">
-        <div className="flex justify-between mb-1">
-          <strong>SPF</strong>
-          <Status status={record.spfStatus} />
+      <div className="text-sm">
+        <div>
+          Host: <code>{record?.dkimHost || "default._domainkey"}</code>
         </div>
-        <div className="text-sm">
-          <div>
-            Host: <code>{record.spfHost}</code>
-          </div>
-          <div>
-            Value: <code>{record.spfValue}</code>
-          </div>
+        <div className="break-all">
+          Value:{" "}
+          <code>
+            {isVerified ? record?.dkimValue : "PENDING_DKIM"}
+          </code>
         </div>
       </div>
 
-      {/* DKIM */}
-      <div className="border rounded-md p-3">
-        <div className="flex justify-between mb-1">
-          <strong>DKIM</strong>
-          <Status status={record.dkimStatus} />
-        </div>
-        <div className="text-sm">
-          <div>
-            Host: <code>{record.dkimHost}</code>
-          </div>
-          <div className="break-all">
-            Value: <code>{record.dkimValue}</code>
-          </div>
-        </div>
-      </div>
-
-      {/* DMARC */}
-      <div className="border rounded-md p-3">
-        <div className="flex justify-between mb-1">
-          <strong>DMARC</strong>
-          <Status status={record.dmarcStatus} />
-        </div>
-        <div className="text-sm">
-          <div>
-            Host: <code>{record.dmarcHost}</code>
-          </div>
-          <div>
-            Value: <code>{record.dmarcValue}</code>
-          </div>
-        </div>
-      </div>
-
-      <button className="mt-2 px-4 py-2 bg-black text-white rounded hover:bg-gray-900">
-        Verify DNS Now
+      <button
+        onClick={fetchDkim}
+        disabled={verifying || isVerified}
+        className={`px-4 py-2 rounded text-white ${
+          isVerified
+            ? "bg-green-600"
+            : "bg-black hover:bg-gray-900"
+        }`}
+      >
+        {isVerified
+          ? "DKIM Verified"
+          : verifying
+          ? "Fetching DKIM..."
+          : "Fetch DKIM"}
       </button>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }
