@@ -2,36 +2,40 @@ import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
 
-// 🔹 Already existing
 export function getTokenData(req: any) {
   try {
-    const cookie = req?.headers?.get?.("cookie") || req?.headers?.cookie || "";
+    const cookie =
+      req?.headers?.get?.("cookie") ||
+      req?.headers?.cookie ||
+      "";
+
     const match = cookie.match(/token=([^;]+)/);
     if (!match) return null;
 
-    const token = match[1];
-    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+    const decoded: any = jwt.verify(
+      match[1],
+      process.env.JWT_SECRET!
+    );
 
-    return {
-      userId: decoded.userId,
-      tenantId: decoded.tenantId,
-      email: decoded.email,
-    };
+    return decoded;
   } catch {
     return null;
   }
 }
 
-// ✅ ADD THIS (IMPORTANT)
+// ✅ REQUIRED FOR RENDER BUILD
 export async function getAuthUser() {
   const cookieStore = cookies();
   const token = cookieStore.get("token")?.value;
 
   if (!token) return null;
 
-  const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+  const decoded: any = jwt.verify(
+    token,
+    process.env.JWT_SECRET!
+  );
 
-  return await prisma.user.findUnique({
+  return prisma.user.findUnique({
     where: { id: decoded.userId },
   });
 }
