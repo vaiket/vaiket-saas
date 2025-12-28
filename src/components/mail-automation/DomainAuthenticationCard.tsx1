@@ -1,0 +1,107 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import DomainAuthenticationCard from "@/components/mail-automation/DomainAuthenticationCard";
+import { CheckCircle, Info } from "lucide-react";
+
+export default function DomainAuthenticationPage() {
+  const [domain, setDomain] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(false);
+  const [verified, setVerified] = useState(false);
+
+  useEffect(() => {
+    // Fetch mailbox domain (already saved during mailbox creation)
+    fetch("/api/mail/overview")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.imapSmtp?.domain) {
+          setDomain(data.imapSmtp.domain);
+          setEnabled(true);
+        }
+      })
+      .catch(() => {
+        setEnabled(false);
+      });
+  }, []);
+
+  return (
+    <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
+      {/* Page Header */}
+      <div>
+        <h1 className="text-2xl font-bold">Domain Authentication</h1>
+        <p className="text-sm text-gray-600 mt-1">
+          Improve email delivery & avoid spam by verifying your domain.
+        </p>
+      </div>
+
+      {/* Info Box */}
+      <div className="rounded-xl border bg-gray-50 p-4 flex gap-3">
+        <Info className="h-5 w-5 text-gray-600 mt-0.5" />
+        <div className="text-sm text-gray-700">
+          <p className="font-medium mb-1">What you need to do</p>
+          <ul className="list-disc ml-5 space-y-1">
+            <li>Open your domain DNS manager (Hostinger, GoDaddy, Cloudflare)</li>
+            <li>Add the SPF, DKIM and DMARC records shown below</li>
+            <li>Wait for DNS propagation (usually 1–30 minutes)</li>
+            <li>Click <b>Recheck DNS</b></li>
+          </ul>
+        </div>
+      </div>
+
+      {/* Domain Badge */}
+      {domain && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-gray-600">Domain:</span>
+          <span className="px-3 py-1 rounded-full bg-black text-white">
+            {domain}
+          </span>
+        </div>
+      )}
+
+      {/* Main Card */}
+      <DomainAuthenticationCard
+        domain={domain ?? undefined}
+        enabled={enabled}
+        onVerified={() => setVerified(true)}
+      />
+
+      {/* Success State */}
+      {verified && (
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4 flex items-center gap-3">
+          <CheckCircle className="h-5 w-5 text-green-600" />
+          <div>
+            <p className="font-medium text-green-700">
+              Domain authentication successful
+            </p>
+            <p className="text-sm text-green-700">
+              Your domain is ready for high-deliverability email sending.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Help Section */}
+      <div className="rounded-xl border p-5">
+        <h3 className="font-semibold mb-2">Where to add DNS records?</h3>
+        <div className="grid sm:grid-cols-2 gap-4 text-sm text-gray-700">
+          <div>
+            <p className="font-medium">Hostinger</p>
+            <p>Domains → DNS / Nameservers → Add Record</p>
+          </div>
+          <div>
+            <p className="font-medium">GoDaddy</p>
+            <p>My Products → DNS → Add New Record</p>
+          </div>
+          <div>
+            <p className="font-medium">Cloudflare</p>
+            <p>DNS → Records → Add Record</p>
+          </div>
+          <div>
+            <p className="font-medium">Other Providers</p>
+            <p>Look for DNS / Zone Editor / Name Server</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,75 @@
+import { NextRequest, NextResponse } from "next/server";
+import prisma from "@/lib/prisma";
+
+/**
+ * PayU sends a POST (x-www-form-urlencoded) to this URL after payment.
+ * We:
+ * 1) Read the form fields
+ * 2) Log transaction
+ * 3) Create/activate UserSubscription for 30 days
+ * 4) Redirect user to /dashboard
+ */
+export async function POST(req: NextRequest) {
+  // PayU posts as form-data / urlencoded → use formData()
+  const form = await req.formData();
+
+  const status = form.get("status")?.toString();
+  const txnid = form.get("txnid")?.toString() || "";
+  const mihpayid = form.get("mihpayid")?.toString() || "";
+  const planKey = form.get("productinfo")?.toString() || ""; // "starter" / "growth"
+
+  const userId = Number(form.get("udf1"));   // you must send this from pricing form
+  const tenantId = Number(form.get("udf2")); // you must send this from pricing form
+  const amount = Number(form.get("amount") || 0);
+
+  console.log("PAYU SUCCESS CALLBACK:", {
+    status,
+    txnid,
+    mihpayid,
+    planKey,
+    userId,
+    tenantId,
+    amount,
+  });
+
+  // If payment failed or tampered, don’t activate
+  if (status !== "success" || !userId || !tenantId) {
+    return NextResponse.redirect(
+      new URL("/pricing?error=payment_failed", "https://ai.vaiket.com")
+    );
+  }
+
+  // 1️⃣ Save transaction log
+  await prisma.transactions.create({
+    data: {
+      user_id: BigInt(userId),
+      tenant_id: BigInt(tenantId),
+      plan_key: planKey,
+      amount,
+      status: "success",
+      payu_txn_id: mihpayid,
+      payu_order_id: txnid,
+    },
+  });
+
+  // 2️⃣ Create / update subscription (30 days validity)
+  const now = new Date();
+  const endsAt = new Date();
+  endsAt.setDate(now.getDate() + 30); // 30-day subscription
+
+  // You can allow multiple records; simplest is just create:
+  await prisma.userSubscription.create({
+    data: {
+      userId,
+      tenantId,
+      planKey,
+      status: "active",
+      startedAt: now,
+      endsAt,
+      paymentRef: mihpayid,
+    },
+  });
+
+  // 3️⃣ Redirect to dashboard in AI app
+  return NextResponse.redirect("https://ai.vaiket.com/dashboard");
+}

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Invoice ${invoiceNumber}</title>
+  <style>
+    ${invoiceCss} /* External CSS will be injected */
+  </style>
+</head>
+<body>
+<div class="cs-container">
+  <div class="cs-invoice cs-style1">
+    <div class="cs-invoice_in" id="download_section">
+      
+      <!-- HEADER -->
+      <div class="cs-invoice_head cs-type1 cs-mb25 column border-bottom-none">
+        <div class="cs-invoice_left w-70 display-flex">
+          <div class="cs-logo cs-mb5 cs-mr20">
+            <img src="${companyLogoUrl}" alt="Logo">
+          </div>
+          <div class="cs-ml22">
+            <div class="cs-invoice_number cs-primary_color cs-f16">
+              <b class="cs-primary_color">Vaiket Invoice</b>
+            </div>
+            <div class="cs-invoice_number cs-primary_color cs-f16 display-flex gap-20">
+              <p><b>GSTIN:</b></p>
+              <p>${companyGSTIN}</p>
+            </div>
+            <div class="cs-invoice_number cs-primary_color cs-f16 display-flex">
+              <p><b>State:</b></p>
+              <p>${companyState}</p>
+            </div>
+            <div class="cs-invoice_number cs-primary_color cs-f16 display-flex">
+              <p><b>PAN:</b></p>
+              <p>${companyPAN}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Amount + Dates -->
+        <div class="cs-invoice_right cs-text_right">
+          <div class="cs-primary_color cs-f16">
+            <b>Total:</b> ₹${total}
+          </div>
+          <div class="cs-primary_color cs-f16">
+            <b>Invoice Date:</b> ${invoiceDate}
+          </div>
+          <div class="cs-primary_color cs-f16">
+            <b>Invoice No:</b> ${invoiceNumber}
+          </div>
+        </div>
+      </div>
+
+      <div class="display-flex cs-text_center">
+        <div class="cs-border-1"></div>
+        <h5 class="cs-width_12 cs-dip_green_color">TAX INVOICE</h5>
+        <div class="cs-border-1"></div>
+      </div>
+
+      <!-- CUSTOMER DETAILS -->
+      <div class="cs-invoice_head cs-mb10">
+        <div class="cs-invoice_left cs-mr97">
+          <b class="cs-primary_color">Customer Name:</b>
+          <p>${tenantName}</p>
+          <p><b class="cs-primary_color">Customer GSTIN:</b> ${tenantGSTIN || "N/A"}</p>
+        </div>
+        <div class="cs-invoice_right">
+          <b class="cs-primary_color">Billing Address:</b>
+          <p>${tenantAddress}</p>
+        </div>
+      </div>
+
+      <div class="cs-border"></div>
+
+      <!-- TABLE -->
+      <div class="cs-table cs-style2 cs-f12 cs-mt20">
+        <table>
+          <thead>
+            <tr class="cs-focus_bg">
+              <th>Item</th>
+              <th>HSN/SAC</th>
+              <th>Rate</th>
+              <th>Taxable</th>
+              <th>CGST</th>
+              <th>SGST</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- TOTALS -->
+      <div class="cs-table cs-style2 cs-mt20">
+        <table>
+          <tbody>
+            <tr>
+              <td class="cs-primary_color"><b>Sub Total:</b></td>
+              <td class="cs-text_right">₹${subTotal}</td>
+            </tr>
+            <tr>
+              <td class="cs-primary_color"><b>CGST:</b></td>
+              <td class="cs-text_right">₹${cgst}</td>
+            </tr>
+            <tr>
+              <td class="cs-primary_color"><b>SGST:</b></td>
+              <td class="cs-text_right">₹${sgst}</td>
+            </tr>
+            <tr>
+              <td class="cs-primary_color"><b>Total:</b></td>
+              <td class="cs-text_right">₹${total}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="cs-mt10"><b>Payment Ref ID:</b> ${paymentRef}</p>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>
