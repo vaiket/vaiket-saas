@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
 
 export async function POST(req: Request) {
   try {
@@ -14,70 +14,46 @@ export async function POST(req: Request) {
       );
     }
 
-    // 🔹 Get SMTP details
-    const smtp = await prisma.smtpCredentials.findFirst({
-      orderBy: { createdAt: "desc" },
-    });
+    // ✅ Get tenant from JWT
+    const cookie = req.headers.get("cookie") || "";
+    const token = cookie.match(/token=([^;]+)/)?.[1];
 
-    if (!smtp) {
-      return NextResponse.json(
-        { success: false, error: "SMTP not configured" },
-        { status: 400 }
-      );
+    if (!token) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    console.log("📨 SMTP CONFIG:", {
-      host: smtp.host,
-      port: smtp.port,
-      user: smtp.username,
-    });
+    const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);
+    const tenantId = decoded.tenantId;
 
-    // ✅ Nodemailer config
-    const transporter = nodemailer.createTransport({
-      host: smtp.host,
-      port: smtp.port,
-      secure: false, // IMPORTANT for 587
-      auth: {
-        user: smtp.username,
-        pass: smtp.password,
-      },
-      tls: {
-        rejectUnauthorized: false,
+    // ✅ Save Campaign
+    const campaign = await prisma.smtp_campaigns.create({
+      data: {
+        tenantid: tenantId,
+        subject,
+        body: html,
+        status: "pending",
       },
     });
 
-    const results = [];
-
+    // ✅ Insert Queue
     for (const email of emails) {
-      try {
-        await transporter.sendMail({
-          from: `"Astramize" <${smtp.username}>`,
-          to: email,
-          subject,
-          html,
-        });
-
-        results.push({
+      await prisma.smtp_queue.create({
+        data: {
+          tenant_id: tenantId,
+          campaign_id: campaign.id,
           email,
-          status: "success",
-        });
-      } catch (err: any) {
-        console.error("❌ MAIL ERROR:", err.message);
-
-        results.push({
-          email,
-          status: "failed",
-          error: err.message,
-        });
-      }
+          status: "pending",
+        },
+      });
     }
 
     return NextResponse.json({
       success: true,
-      results,
+      message: "Campaign queued successfully",
     });
-  } catch (error) {
-    console.error("❌ MAIL API ERROR:", error);
+
+  } catch (err) {
+    console.error("MAIL SEND ERROR:", err);
     return NextResponse.json(
       { success: false, error: "Server error" },
       { status: 500 }

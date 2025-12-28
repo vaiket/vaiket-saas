@@ -35,7 +35,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
-, "src/app/api/mail/create/route.1ts", "next.config.ts.17.12.2025", "src/components/mail-automation/MailboxVerificationCard.tsx", "src/proxy.ts3", "src/components/mail-automation/MailboxVerificationCard.tsx2", "src/components/mail-automation/DomainAuthenticationCard.tsx1", "src/components/mail-automation/DomainAuthenticationCard.tsx3", "src/components/mail-automation/DomainAuthenticationCard.tsx2", "src/app/dashboard/mail-accounts/page.tsx-2025/21", "src/app/dashboard/email-branding/[projectId]/page.tsx1", "src/lib/crypto.ts2", "src/lib/crypto.ts1"  ],
+, "src/app/api/mail/create/route.1ts", "next.config.ts.17.12.2025", "src/components/mail-automation/MailboxVerificationCard.tsx", "src/proxy.ts3", "src/components/mail-automation/MailboxVerificationCard.tsx2", "src/components/mail-automation/DomainAuthenticationCard.tsx1", "src/components/mail-automation/DomainAuthenticationCard.tsx3", "src/components/mail-automation/DomainAuthenticationCard.tsx2", "src/app/dashboard/mail-accounts/page.tsx-2025/21", "src/app/dashboard/email-branding/[projectId]/page.tsx1", "src/lib/crypto.ts2", "src/lib/crypto.ts1", "src/app/dashboard/layout.tsxw7", "src/app/dashboard/settings/page.tsx1"  ],
   "exclude": [
     "node_modules",
     ".next",
