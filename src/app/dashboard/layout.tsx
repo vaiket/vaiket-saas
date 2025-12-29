@@ -41,7 +41,7 @@ const icons: { [key: string]: React.ReactNode } = {
   "Users Management": <Users className="w-5 h-5" />,
   Leads: <TrendingUp className="w-5 h-5" />,
   Inbox: <MessageSquare className="w-5 h-5" />,
-  "Traffic Analytics": <BarChart3 className="w-5 h-5" />,
+  "Campaigns": <BarChart3 className="w-5 h-5" />,
   Billing: <CreditCard className="w-5 h-5" />,
   Settings: <Settings className="w-5 h-5" />,
 };
@@ -58,7 +58,7 @@ const menu = [
   { name: "Users Management", path: "/dashboard/users-management" },
   { name: "Leads", path: "/dashboard/leads" },
   { name: "Inbox", path: "/dashboard/inbox" },
-  { name: "Traffic Analytics", path: "/dashboard/traffic" },
+  { name: "Campaigns", path: "/dashboard/campaigns" },
   { name: "Billing", path: "/dashboard/billing" },
   { name: "Settings", path: "/dashboard/settings" },
 ];
