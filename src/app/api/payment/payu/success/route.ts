@@ -6,28 +6,39 @@ export async function POST(req: Request) {
   try {
     const body = await req.formData();
 
-    const status = body.get("status") as string;
     const txnid = body.get("txnid") as string;
+    const status = body.get("status") as string;
     const amount = body.get("amount") as string;
     const productinfo = body.get("productinfo") as string;
     const firstname = body.get("firstname") as string;
     const email = body.get("email") as string;
     const receivedHash = body.get("hash") as string;
 
-    // 1️⃣ Verify payment exists
+    if (!txnid || !status) {
+      return Response.redirect(
+        new URL("/dashboard/Subscriptions?payment=error", req.url),
+        303
+      );
+    }
+
     const payment = await prisma.payment.findUnique({
       where: { txnid },
     });
 
     if (!payment) {
-      return NextResponse.json({ error: "Payment not found" }, { status: 404 });
+      return Response.redirect(
+        new URL("/dashboard/Subscriptions?payment=error", req.url),
+        303
+      );
     }
 
-    // 2️⃣ Recreate hash (PayU rule)
+    // ✅ Verify PayU hash
     const salt = process.env.PAYU_SALT!;
+    const key = process.env.PAYU_KEY!;
+
     const hashString =
       `${salt}|${status}|||||||||||` +
-      `${email}|${firstname}|${productinfo}|${amount}|${txnid}|${process.env.PAYU_KEY}`;
+      `${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
 
     const expectedHash = crypto
       .createHash("sha512")
@@ -35,7 +46,6 @@ export async function POST(req: Request) {
       .digest("hex");
 
     if (expectedHash !== receivedHash) {
-      // ❌ Possible tampering
       await prisma.payment.update({
         where: { txnid },
         data: {
@@ -44,12 +54,13 @@ export async function POST(req: Request) {
         },
       });
 
-      return NextResponse.redirect(
-        new URL("/dashboard/Subscriptions?payment=failed", req.url)
+      return Response.redirect(
+        new URL("/dashboard/Subscriptions?payment=failed", req.url),
+        303
       );
     }
 
-    // 3️⃣ Mark payment SUCCESS
+    // ✅ Mark payment success
     await prisma.payment.update({
       where: { txnid },
       data: {
@@ -58,41 +69,51 @@ export async function POST(req: Request) {
       },
     });
 
-    // 4️⃣ Activate subscription
-    const now = new Date();
-    const endsAt = new Date(now);
-    endsAt.setDate(now.getDate() + 30); // 30 days
-
-    await prisma.userSubscription.upsert({
+    // ✅ SAFE subscription logic (NO upsert)
+    const existing = await prisma.userSubscription.findFirst({
       where: {
-        tenantId_planKey: {
-          tenantId: payment.tenantId!,
-          planKey: payment.product!,
-        },
-      },
-      update: {
-        status: "ACTIVE",
-        endsAt,
-      },
-      create: {
         tenantId: payment.tenantId!,
-        userId: payment.userId!,
         planKey: payment.product!,
-        status: "ACTIVE",
-        startedAt: now,
-        endsAt,
-        amountPaid: payment.amount,
       },
     });
 
-    // 5️⃣ Redirect user to dashboard
-    return NextResponse.redirect(
-      new URL("/dashboard/Subscriptions?payment=success", req.url)
+    const now = new Date();
+    const endsAt = new Date();
+    endsAt.setDate(now.getDate() + 30);
+
+    if (existing) {
+      await prisma.userSubscription.update({
+        where: { id: existing.id },
+        data: {
+          status: "ACTIVE",
+          endsAt,
+        },
+      });
+    } else {
+      await prisma.userSubscription.create({
+        data: {
+          tenantId: payment.tenantId!,
+          userId: payment.userId!,
+          planKey: payment.product!,
+          status: "ACTIVE",
+          startedAt: now,
+          endsAt,
+          amountPaid: payment.amount,
+        },
+      });
+    }
+
+    // ✅ FINAL REDIRECT (SAFE)
+    return Response.redirect(
+      new URL("/dashboard/email-management", req.url),
+      303
     );
   } catch (err) {
-    console.error("❌ PayU Success Error:", err);
-    return NextResponse.redirect(
-      new URL("/dashboard/Subscriptions?payment=error", req.url)
+    console.error("PAYU SUCCESS ERROR:", err);
+
+    return Response.redirect(
+      new URL("/dashboard/Subscriptions?payment=error", req.url),
+      303
     );
   }
 }

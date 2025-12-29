@@ -40,7 +40,7 @@ export async function POST(req: Request) {
         tenantId: user.tenantId,
         userId: user.id,
         product: "BASIC_999",
-        amount: 999,
+        amount: 9,
         status: "CREATED",
       },
     });
