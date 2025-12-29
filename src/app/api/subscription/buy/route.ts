@@ -4,10 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
   try {
-    // 1️⃣ Resolve origin safely
-    const { origin } = new URL(req.url);
+    // ✅ Always resolve correct HTTPS origin
+    const origin = new URL(req.headers.get("referer") || "").origin;
 
-    // 2️⃣ Get auth context
+    // ✅ Get auth
     const authRes = await fetch(`${origin}/api/auth/me`, {
       headers: {
         cookie: req.headers.get("cookie") || "",
@@ -21,18 +21,18 @@ export async function POST(req: Request) {
       );
     }
 
-    const auth = await authRes.json();
-    const user = auth.user;
+    const { user } = await authRes.json();
 
     if (!user?.id || !user?.tenantId) {
       return NextResponse.json(
-        { success: false, error: "Invalid user context" },
+        { success: false, error: "Invalid user" },
         { status: 400 }
       );
     }
 
-    // 3️⃣ Create payment (NO provider field)
+    // ✅ Payment info
     const txnid = "TXN_" + Date.now();
+    const amount = "9"; // ✅ SAME everywhere
 
     await prisma.payment.create({
       data: {
@@ -40,15 +40,14 @@ export async function POST(req: Request) {
         tenantId: user.tenantId,
         userId: user.id,
         product: "BASIC_999",
-        amount: 9,
+        amount: Number(amount),
         status: "CREATED",
       },
     });
 
-    // 4️⃣ PayU hash
+    // ✅ PayU hash
     const key = process.env.PAYU_KEY!;
     const salt = process.env.PAYU_SALT!;
-    const amount = "10";
     const productinfo = "Email Automation Plan";
     const firstname = user.email.split("@")[0];
     const email = user.email;
@@ -63,7 +62,7 @@ export async function POST(req: Request) {
       .update(hashString)
       .digest("hex");
 
-    // 5️⃣ Response to frontend
+    // ✅ Return PayU data
     return NextResponse.json({
       success: true,
       payuUrl: process.env.PAYU_GATEWAY_URL,
