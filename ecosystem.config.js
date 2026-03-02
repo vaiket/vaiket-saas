@@ -20,7 +20,7 @@ module.exports = {
       max_memory_restart: "300M",
       env: {
         NODE_ENV: "production",
-        APP_BASE_URL: process.env.APP_BASE_URL || "http://localhost:3000",
+        APP_BASE_URL: process.env.APP_BASE_URL || "https://app.vaiket.com",
         IMAP_SYNC_INTERVAL_SECONDS: process.env.IMAP_SYNC_INTERVAL_SECONDS || "7"
       }
     }

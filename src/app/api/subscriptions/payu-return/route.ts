@@ -96,9 +96,16 @@ export async function POST(req: Request) {
             },
     });
 
-    const base = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const base =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.BASE_URL ||
+      "https://app.vaiket.com";
     const redirectUrl =
-      base + (status === "success" ? "/billing/success" : "/billing/failed");
+      base.replace(/\/+$/, "") +
+      (status === "success" ? "/billing/success" : "/billing/failed");
 
     return NextResponse.redirect(redirectUrl);
   } catch (err) {

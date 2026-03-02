@@ -49,11 +49,11 @@ function getBaseUrl(requestUrl?: string | null) {
       const url = new URL(requestUrl);
       return `${url.protocol}//${url.host}`;
     } catch {
-      return "http://localhost:3000";
+      return "https://app.vaiket.com";
     }
   }
 
-  return "http://localhost:3000";
+  return "https://app.vaiket.com";
 }
 
 export function isSmtpConfigured() {

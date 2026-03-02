@@ -30,7 +30,7 @@ export default function PricingPopup({ onClose }: { onClose: () => void }) {
       <div className="bg-white w-[95vw] max-w-[900px] h-[90vh] rounded-2xl shadow-2xl overflow-hidden border">
         {/* If local pricing page */}
         <iframe
-          src="http://localhost:3000/pricing?embedded=1"
+          src="/pricing?embedded=1"
           className="w-full h-full"
           style={{ border: "none" }}
         />

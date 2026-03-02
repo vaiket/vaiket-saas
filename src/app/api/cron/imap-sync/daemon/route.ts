@@ -1,9 +1,21 @@
 import { NextResponse } from "next/server";
 
+function getAppBaseUrl() {
+  const raw =
+    process.env.APP_BASE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.BASE_URL ||
+    "https://app.vaiket.com";
+
+  return raw.replace(/\/+$/, "");
+}
+
 async function runCron() {
   try {
     // Call your main cron route
-    await fetch("http://localhost:3000/api/cron/imap-sync/ping", {
+    await fetch(`${getAppBaseUrl()}/api/cron/imap-sync/ping`, {
       method: "GET",
       cache: "no-store",
     });
@@ -19,7 +31,7 @@ export async function GET() {
   // Schedule next run
   setTimeout(async () => {
     try {
-      await fetch("http://localhost:3000/api/cron/imap-sync/daemon", {
+      await fetch(`${getAppBaseUrl()}/api/cron/imap-sync/daemon`, {
         method: "GET",
         cache: "no-store",
       });

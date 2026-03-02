@@ -7,6 +7,17 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 const PAYU_KEY = process.env.PAYU_KEY!;
 const PAYU_SALT = process.env.PAYU_SALT!;
 
+function getAppBaseUrl() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.BASE_URL ||
+    "https://app.vaiket.com";
+
+  return raw.replace(/\/+$/, "");
+}
+
 /**
  * This route is triggered by PayU after a successful payment.
  * It MUST verify the PayU response hash.
@@ -79,7 +90,9 @@ export async function POST(req: Request) {
     }
 
     // Step 4 — Redirect user back to dashboard
-    return NextResponse.redirect("https://yourdomain.com/dashboard/billing");
+    return NextResponse.redirect(
+      new URL("/dashboard/settings/billing?payment=success", getAppBaseUrl())
+    );
 
   } catch (e: any) {
     console.log("SUCCESS ROUTE ERROR:", e);

@@ -6,11 +6,11 @@
  * - Exponential backoff on repeated network failures
  *
  * Usage:
- *  APP_BASE_URL=http://localhost:3000 IMAP_SYNC_INTERVAL_SECONDS=7 node worker/imap-daemon.js
+ *  APP_BASE_URL=https://app.vaiket.com IMAP_SYNC_INTERVAL_SECONDS=7 node worker/imap-daemon.js
  */
 
 const INTERVAL_SECONDS = parseInt(process.env.IMAP_SYNC_INTERVAL_SECONDS || "7", 10);
-const APP_BASE_URL = process.env.APP_BASE_URL || "http://localhost:3000";
+const APP_BASE_URL = process.env.APP_BASE_URL || "https://app.vaiket.com";
 const HEALTH_PATH = process.env.HEALTH_PATH || "/api/health";
 const ENDPOINT = process.env.IMAP_SYNC_ENDPOINT || "/api/cron/imap-sync";
 const FULL_URL = `${APP_BASE_URL.replace(/\/$/, "")}${ENDPOINT}`;

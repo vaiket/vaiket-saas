@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+function getAppBaseUrl() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.BASE_URL ||
+    "https://app.vaiket.com";
+
+  return raw.replace(/\/+$/, "");
+}
+
 
 export async function POST(req: Request) {
   try {
@@ -41,7 +52,7 @@ export async function POST(req: Request) {
 
     // 2) Redirect user back to billing page with fail notice
     return NextResponse.redirect(
-      "https://yourdomain.com/dashboard/billing?payment=failed"
+      new URL("/dashboard/settings/billing?payment=failed", getAppBaseUrl())
     );
 
   } catch (e: any) {

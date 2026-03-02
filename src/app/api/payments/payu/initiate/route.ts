@@ -8,6 +8,17 @@ const PAYU_KEY = process.env.PAYU_KEY!;
 const PAYU_SALT = process.env.PAYU_SALT!;
 const PAYU_GATEWAY_URL = process.env.PAYU_GATEWAY_URL!;
 
+function getAppBaseUrl() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.BASE_URL ||
+    "https://app.vaiket.com";
+
+  return raw.replace(/\/+$/, "");
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -53,6 +64,11 @@ export async function POST(req: Request) {
 
     console.log("HASH:", hash);
 
+    const successUrl =
+      process.env.PAYU_SUCCESS_URL || `${getAppBaseUrl()}/api/payments/payu/success`;
+    const failureUrl =
+      process.env.PAYU_FAILURE_URL || `${getAppBaseUrl()}/api/payments/payu/fail`;
+
     // 4) Auto-submit HTML to redirect user
     const payuForm = `
       <html>
@@ -65,8 +81,8 @@ export async function POST(req: Request) {
             <input type="hidden" name="firstname" value="${firstname}" />
             <input type="hidden" name="email" value="${email}" />
             <input type="hidden" name="phone" value="${phone}" />
-            <input type="hidden" name="surl" value="https://yourdomain.com/api/payments/payu/success" />
-            <input type="hidden" name="furl" value="https://yourdomain.com/api/payments/payu/fail" />
+            <input type="hidden" name="surl" value="${successUrl}" />
+            <input type="hidden" name="furl" value="${failureUrl}" />
             <input type="hidden" name="hash" value="${hash}" />
           </form>
           <p>Redirecting to PayU secure payment...</p>
