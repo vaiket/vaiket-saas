@@ -9,22 +9,56 @@ type OAuthState = {
   gmailConnect?: boolean;
 };
 
-function parseOAuthState(raw: string | null): OAuthState {
+type WhatsAppOAuthState = {
+  nonce: string;
+  tenantId: number;
+  userId: number;
+  expiresAt: number;
+};
+
+function parseOAuthState(raw: string | null): unknown {
   if (!raw) return {};
   try {
     const json = Buffer.from(raw, "base64url").toString("utf8");
-    const parsed = JSON.parse(json) as OAuthState;
+    const parsed = JSON.parse(json) as unknown;
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
   }
 }
 
+function isGoogleState(value: unknown): value is OAuthState {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return "intent" in v || "gmailConnect" in v;
+}
+
+function isWhatsAppState(value: unknown): value is WhatsAppOAuthState {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.nonce === "string" &&
+    typeof v.tenantId === "number" &&
+    typeof v.userId === "number" &&
+    typeof v.expiresAt === "number"
+  );
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
-    const state = parseOAuthState(url.searchParams.get("state"));
+    const parsedState = parseOAuthState(url.searchParams.get("state"));
+
+    // If Meta WhatsApp OAuth callback was accidentally pointed to Google callback,
+    // forward it to the dedicated WhatsApp callback route with all query params.
+    if (isWhatsAppState(parsedState)) {
+      const target = new URL("/api/whatsapp/connect/callback", req.url);
+      target.search = url.search;
+      return NextResponse.redirect(target);
+    }
+
+    const state = isGoogleState(parsedState) ? parsedState : {};
     const intent = state.intent === "signup" ? "signup" : "login";
 
     if (!code) {

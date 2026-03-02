@@ -43,7 +43,8 @@ function getAppBaseUrl(req: Request) {
   const forwardedHost = readText(req.headers.get("x-forwarded-host"));
   const host = forwardedHost || readText(req.headers.get("host")) || requestUrl.host;
   const proto = forwardedProto || requestUrl.protocol.replace(":", "");
-  return `${proto}://${host}`;
+  const normalizedHost = host.startsWith("0.0.0.0:") ? host.replace("0.0.0.0", "localhost") : host;
+  return `${proto}://${normalizedHost}`;
 }
 
 function encodePayload(payload: OAuthStatePayload) {
