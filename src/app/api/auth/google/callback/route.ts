@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 type OAuthState = {
   intent?: "login" | "signup";
   gmailConnect?: boolean;
+  redirectUri?: string;
 };
 
 type WhatsAppOAuthState = {
@@ -51,7 +52,15 @@ function getGoogleRedirectUri(req: Request) {
     return configured;
   }
 
-  return `${getPublicBaseUrl(req)}/api/auth/google/callback`;
+  return `${getPublicBaseUrl(req)}/api/google/callback`;
+}
+
+function resolveGoogleRedirectUri(req: Request, state: OAuthState) {
+  const stateUri = readText(state.redirectUri);
+  if (stateUri) {
+    return stateUri;
+  }
+  return getGoogleRedirectUri(req);
 }
 
 function parseOAuthState(raw: string | null): unknown {
@@ -104,7 +113,7 @@ export async function GET(req: Request) {
       return NextResponse.redirect(new URL("/login?error=google_missing_code", appBaseUrl));
     }
 
-    const redirectUri = getGoogleRedirectUri(req);
+    const redirectUri = resolveGoogleRedirectUri(req, state);
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const jwtSecret = process.env.JWT_SECRET;

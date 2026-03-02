@@ -36,7 +36,8 @@ function getGoogleRedirectUri(req: Request) {
     return configured;
   }
 
-  return `${getPublicBaseUrl(req)}/api/auth/google/callback`;
+  // Use wrapper callback as canonical URI so old Google Console configs keep working.
+  return `${getPublicBaseUrl(req)}/api/google/callback`;
 }
 
 export async function GET(req: Request) {
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
   const statePayload = {
     intent,
     gmailConnect: isGmailConnect,
+    redirectUri,
   };
   const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
   params.set("state", state);
