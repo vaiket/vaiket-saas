@@ -1,0 +1,183 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { RefreshCcw, CheckCircle2, AlertCircle, Copy } from "lucide-react";
+
+/* ================= TYPES ================= */
+
+type DNSStatus = "verified" | "pending" | "failed";
+
+interface DNSRow {
+  id: number;
+
+  spfHost: string;
+  spfValue: string;
+  spfStatus: DNSStatus;
+
+  dkimHost: string;
+  dkimValue: string;
+  dkimStatus: DNSStatus;
+
+  dmarcHost: string;
+  dmarcValue: string;
+  dmarcStatus: DNSStatus;
+}
+
+/* ================= COMPONENT ================= */
+
+export default function DomainAuthenticationCard() {
+  const [dns, setDns] = useState<DNSRow | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const copy = (v: string) => navigator.clipboard.writeText(v);
+
+  const icon = (status: DNSStatus) => {
+    if (status === "verified")
+      return <CheckCircle2 className="h-5 w-5 text-green-600" />;
+    if (status === "failed")
+      return <AlertCircle className="h-5 w-5 text-red-600" />;
+    return <AlertCircle className="h-5 w-5 text-yellow-500" />;
+  };
+
+  /* ================= LOAD FROM DB ================= */
+
+  const loadFromDB = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/mail/overview", {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      if (data?.dns?.length > 0) {
+        setDns(data.dns[0]); // unique mailbox_id
+      } else {
+        setDns(null);
+      }
+    } catch {
+      setError("Failed to load DNS records");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFromDB();
+  }, []);
+
+  /* ================= UI BLOCK ================= */
+
+  const Record = ({
+    title,
+    host,
+    value,
+    status,
+  }: {
+    title: string;
+    host: string;
+    value: string;
+    status: DNSStatus;
+  }) => (
+    <div className="rounded-xl border p-4 bg-white">
+      <div className="flex justify-between mb-3">
+        <div className="flex gap-2 font-semibold">
+          {icon(status)} {title}
+        </div>
+        <span className="text-sm capitalize">{status}</span>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <div className="text-gray-500 mb-1">Host</div>
+          <div className="flex gap-2 items-center">
+            <code className="bg-gray-100 px-2 py-1 rounded">{host}</code>
+            <Copy className="h-4 w-4 cursor-pointer" onClick={() => copy(host)} />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-gray-500 mb-1">Type</div>
+          <code className="bg-gray-100 px-2 py-1 rounded">TXT</code>
+        </div>
+
+        <div>
+          <div className="text-gray-500 mb-1">Value</div>
+          <div className="flex gap-2 items-center">
+            <code className="bg-gray-100 px-2 py-1 rounded break-all">
+              {value || "—"}
+            </code>
+            {value && (
+              <Copy
+                className="h-4 w-4 cursor-pointer"
+                onClick={() => copy(value)}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ================= RENDER ================= */
+
+  return (
+    <section className="rounded-2xl border p-6 bg-gray-50">
+      <div className="flex justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-semibold">
+            Step 2: Domain Authentication
+          </h2>
+          <p className="text-sm text-gray-500">
+            Loaded directly from database
+          </p>
+        </div>
+
+        <button
+          onClick={loadFromDB}
+          disabled={loading}
+          className="bg-black text-white px-4 py-2 rounded-lg flex gap-2"
+        >
+          <RefreshCcw
+            className={loading ? "animate-spin h-4 w-4" : "h-4 w-4"}
+          />
+          Reload
+        </button>
+      </div>
+
+      {!dns && (
+        <div className="bg-white border rounded-lg p-4 text-sm text-gray-500">
+          No DNS records found yet.
+        </div>
+      )}
+
+      {dns && (
+        <div className="space-y-4">
+          <Record
+            title="SPF"
+            host={dns.spfHost}
+            value={dns.spfValue}
+            status={dns.spfStatus}
+          />
+          <Record
+            title="DKIM"
+            host={dns.dkimHost}
+            value={dns.dkimValue}
+            status={dns.dkimStatus}
+          />
+          <Record
+            title="DMARC"
+            host={dns.dmarcHost}
+            value={dns.dmarcValue}
+            status={dns.dmarcStatus}
+          />
+        </div>
+      )}
+
+      {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
+    </section>
+  );
+}

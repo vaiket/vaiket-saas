@@ -1,0 +1,15 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="markBg" x1="14" y1="12" x2="82" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="markRing" x1="10" y1="10" x2="86" y2="86" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6EE7B7"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 6L80 24V60L48 78L16 60V24L48 6Z" fill="url(#markRing)"/>
+  <path d="M48 11L75 27V57L48 73L21 57V27L48 11Z" fill="url(#markBg)"/>
+  <text x="48" y="53" text-anchor="middle" fill="#ECFEFF" font-size="28" font-family="Inter, Arial, sans-serif" font-weight="800">VB</text>
+</svg>

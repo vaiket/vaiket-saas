@@ -1,0 +1,403 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                Int                @id @default(autoincrement())
+  name              String
+  country           String?
+  timezone          String?
+  createdAt         DateTime           @default(now())
+  autoReplyRules    AutoReplyRule[]
+  customers         Customer[]
+  gmailAccounts     GmailAccount[]
+  incomingEmails    IncomingEmail[]
+  mailAccounts      MailAccount[]
+  mailLogs          MailLog[]
+  onboarding        Onboarding[]
+  smtpCredentials   SmtpCredentials?
+  apiKeys           TenantApiKey[]
+  settings          TenantSettings?
+  users             User[]
+  userSubscriptions UserSubscription[]
+}
+
+model User {
+  id                  Int                @id @default(autoincrement())
+  tenantId            Int
+  name                String
+  email               String             @unique
+  mobile              String?
+  password            String
+  role                String
+  createdAt           DateTime           @default(now())
+  onboardingCompleted Boolean            @default(false)
+  profileImage        String?
+  onboarding          Onboarding?
+  tenant              Tenant             @relation(fields: [tenantId], references: [id])
+  userSubscriptions   UserSubscription[]
+}
+
+model TenantSettings {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @unique
+  aiPrimary  String   @default("openai")
+  aiFallback String   @default("deepseek,gemini")
+  createdAt  DateTime @default(now())
+  aiMode     String   @default("balanced")
+  aiModel    String   @default("gpt-4o-mini")
+  autoReply  Boolean  @default(true)
+  tone       String   @default("professional")
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model SmtpCredentials {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int      @unique
+  host      String?
+  port      Int?
+  username  String?
+  password  String?
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model TenantApiKey {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  provider  String
+  apiKey    String
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Onboarding {
+  id           Int     @id @default(autoincrement())
+  userId       Int     @unique
+  tenantId     Int
+  phone        String?
+  website      String?
+  about        String?
+  services     String?
+  pricing      String?
+  tone         String?
+  businessName String?
+  tenant       Tenant  @relation(fields: [tenantId], references: [id])
+  user         User    @relation(fields: [userId], references: [id])
+}
+
+model MailAccount {
+  id                Int             @id @default(autoincrement())
+  name              String
+  email             String
+  provider          String
+  smtpHost          String
+  smtpPort          Int
+  smtpSecure        Boolean         @default(false)
+  smtpUser          String
+  smtpPass          String
+  imapHost          String?
+  imapPort          Int?
+  imapSecure        Boolean         @default(false)
+  imapUser          String?
+  imapPass          String?
+  active            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  tenantId          Int
+  oauthAccessToken  String?
+  oauthRefreshToken String?
+  authType          String          @default("password")
+  oauthExpiry       DateTime?
+  oauthExpiresAt    DateTime?
+  oauthProvider     String?
+  signature         String?
+  IncomingEmail     IncomingEmail[]
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  MailLogs          MailLog[]
+}
+
+model MailLog {
+  id            Int            @id @default(autoincrement())
+  mailAccountId Int
+  to            String?
+  from          String?
+  subject       String?
+  body          String?
+  status        String?
+  error         String?
+  createdAt     DateTime       @default(now())
+  replyToId     Int?
+  tenantId      Int?
+  type          String?        @default("unknown")
+  mailAccount   MailAccount    @relation(fields: [mailAccountId], references: [id])
+  incomingEmail IncomingEmail? @relation("IncomingToLog", fields: [replyToId], references: [id])
+  tenant        Tenant?        @relation(fields: [tenantId], references: [id])
+}
+
+model IncomingEmail {
+  id            Int         @id @default(autoincrement())
+  mailAccountId Int
+  from          String?
+  to            String?
+  subject       String?
+  body          String?
+  raw           String?
+  processed     Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  html          String?
+  messageId     String?
+  status        String?     @default("pending")
+  tenantId      Int
+  intent        String?
+  priority      Int?
+  sentiment     String?
+  threadId      String?
+  mailAccount   MailAccount @relation(fields: [mailAccountId], references: [id])
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  MailLogs      MailLog[]   @relation("IncomingToLog")
+}
+
+model Lead {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String?
+  phone     String?
+  source    String?
+  createdAt DateTime @default(now())
+}
+
+model Traffic {
+  id     Int      @id @default(autoincrement())
+  date   DateTime
+  visits Int
+}
+
+model Customer {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int
+  fullName     String
+  email        String?  @unique
+  mobile       String?
+  state        String?
+  country      String?
+  pincode      String?
+  customerType String?
+  createdAt    DateTime @default(now())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model SmtpAccount {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  host      String
+  port      Int
+  username  String
+  password  String
+  fromEmail String
+  secure    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OtpRequest {
+  id           String   @id @default(uuid())
+  email        String
+  otp          String
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+  used         Boolean  @default(false)
+  fullName     String?
+  tempPassword String?
+
+  @@index([email])
+}
+
+model SubscriptionPlan {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique
+  title      String
+  priceMonth Int
+  priceYear  Int?
+  features   String?
+  createdAt  DateTime @default(now())
+}
+
+model UserSubscription {
+  id           Int       @id @default(autoincrement())
+  userId       Int
+  tenantId     Int
+  planKey      String
+  status       String
+  startedAt    DateTime?
+  endsAt       DateTime?
+  paymentRef   String?
+  createdAt    DateTime  @default(now())
+  billingCycle String    @default("monthly")
+  amountPaid   Int?
+  invoices     Invoice[] @relation("SubInvoices")
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  user         User      @relation(fields: [userId], references: [id])
+}
+
+model PaymentLog {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  userId      Int?
+  provider    String
+  providerRef String?
+  amount      Int
+  currency    String   @default("INR")
+  status      String
+  meta        Json?
+  createdAt   DateTime @default(now())
+}
+
+model Payment {
+  id        Int      @id @default(autoincrement())
+  txnid     String   @unique
+  tenantId  Int?
+  userId    Int?
+  amount    Int
+  product   String?
+  status    String
+  raw       Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model transactions {
+  id            BigInt   @id @default(autoincrement())
+  user_id       BigInt?
+  tenant_id     BigInt?
+  plan_key      String
+  amount        Int
+  status        String
+  payu_txn_id   String?
+  payu_order_id String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@map("transactions")
+}
+
+model AutoReplyRule {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  keyword   String
+  replyText String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  priority  Int      @default(1)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Invoice {
+  id            Int              @id @default(autoincrement())
+  userId        Int
+  tenantId      Int
+  subId         Int
+  amount        Int
+  paid          Boolean          @default(true)
+  pdfUrl        String?
+  createdAt     DateTime         @default(now())
+  invoiceNumber String?          @unique
+  subscription  UserSubscription @relation("SubInvoices", fields: [subId], references: [id])
+}
+
+model GmailAccount {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime @db.Timestamptz(6)
+  tenantId     Int
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model TenantSubscription {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  product   String
+  status    String
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("tenant_subscriptions")
+}
+
+model TenantMailbox {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  email      String    @unique
+  username   String
+  domain     String
+  mailcowId  String?
+  quotaMB    Int?      @default(1024)
+  active     Boolean?  @default(true)
+
+  imapHost   String
+  imapPort   Int
+  imapSecure Boolean
+
+  smtpHost   String
+  smtpPort   Int
+  smtpSecure Boolean
+
+  createdAt  DateTime  @default(now())
+
+  dnsRecords MailboxDNS[]
+
+  @@map("mailboxes")
+}
+
+
+
+model Mailbox {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  domain           String
+  email            String
+  connectionStatus String   @default("pending") @map("connection_status")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  dnsRecords       MailboxDNS[]
+
+  @@map("mailboxes")
+}
+
+model MailboxDNS {
+  id          Int      @id @default(autoincrement())
+
+  tenantId    Int      @map("tenant_id")
+  mailboxId   Int      @map("mailbox_id")
+  domain      String
+
+  spfHost     String   @map("spf_host")
+  spfValue    String   @map("spf_value")
+
+  dkimHost    String   @map("dkim_host")
+  dkimValue   String   @map("dkim_value")
+
+  dmarcHost   String   @map("dmarc_host")
+  dmarcValue  String   @map("dmarc_value")
+
+  spfStatus   String   @default("pending") @map("spf_status")
+  dkimStatus  String   @default("pending") @map("dkim_status")
+  dmarcStatus String   @default("pending") @map("dmarc_status")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  mailbox     TenantMailbox @relation(fields: [mailboxId], references: [id], onDelete: Cascade)
+
+  @@map("mailbox_dns")
+}

@@ -1,0 +1,41 @@
+<svg width="320" height="320" viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="g1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(160 132) rotate(90) scale(130)">
+      <stop stop-color="#8EFFF0"/>
+      <stop offset="1" stop-color="#043840"/>
+    </radialGradient>
+    <linearGradient id="g2" x1="95" y1="85" x2="225" y2="225" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#76FFEA"/>
+      <stop offset="1" stop-color="#0F6775"/>
+    </linearGradient>
+    <filter id="f1" x="0" y="0" width="320" height="320" filterUnits="userSpaceOnUse">
+      <feGaussianBlur stdDeviation="22" />
+    </filter>
+  </defs>
+
+  <circle cx="160" cy="160" r="110" fill="#0A1B22"/>
+  <circle cx="160" cy="160" r="90" fill="url(#g1)"/>
+  <circle cx="160" cy="160" r="90" fill="#00151A" fill-opacity="0.62"/>
+
+  <g opacity="0.65" filter="url(#f1)">
+    <circle cx="160" cy="120" r="64" fill="#58FFE2"/>
+  </g>
+
+  <circle cx="160" cy="108" r="56" fill="url(#g2)" stroke="#A9FFF0" stroke-opacity="0.8" stroke-width="3"/>
+  <rect x="116" y="84" width="88" height="50" rx="24" fill="#04181F" stroke="#66FFE6" stroke-opacity="0.5"/>
+  <circle cx="140" cy="108" r="7" fill="#B5FFF4"/>
+  <circle cx="180" cy="108" r="7" fill="#B5FFF4"/>
+  <path d="M148 122C150.9 126.2 169.4 126.2 172.3 122" stroke="#7DFFE8" stroke-width="4" stroke-linecap="round"/>
+
+  <circle cx="104" cy="108" r="14" fill="#0D4953" stroke="#91FFF0" stroke-opacity="0.7" stroke-width="2"/>
+  <circle cx="216" cy="108" r="14" fill="#0D4953" stroke="#91FFF0" stroke-opacity="0.7" stroke-width="2"/>
+
+  <rect x="145" y="58" width="30" height="7" rx="3.5" fill="#74FFEB" fill-opacity="0.7"/>
+  <circle cx="160" cy="50" r="8" fill="#9DFFF2"/>
+
+  <path d="M122 152C132 140 188 140 198 152L210 183C204 195 191 203 177 203H143C129 203 116 195 110 183L122 152Z" fill="#0A2A32" stroke="#6CFFE9" stroke-opacity="0.55" stroke-width="2"/>
+  <path d="M144 188H176" stroke="#81FFEE" stroke-opacity="0.8" stroke-width="3" stroke-linecap="round"/>
+
+  <text x="160" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#19D8C7">VAI</text>
+</svg>
+

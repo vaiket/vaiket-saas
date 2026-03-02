@@ -1,0 +1,150 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
+
+type OAuthState = {
+  intent?: "login" | "signup";
+  gmailConnect?: boolean;
+};
+
+function parseOAuthState(raw: string | null): OAuthState {
+  if (!raw) return {};
+  try {
+    const json = Buffer.from(raw, "base64url").toString("utf8");
+    const parsed = JSON.parse(json) as OAuthState;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const code = url.searchParams.get("code");
+    const state = parseOAuthState(url.searchParams.get("state"));
+    const intent = state.intent === "signup" ? "signup" : "login";
+
+    if (!code) {
+      return NextResponse.redirect(new URL("/login?error=google_missing_code", req.url));
+    }
+
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!redirectUri || !clientId || !clientSecret || !jwtSecret) {
+      return NextResponse.redirect(new URL("/login?error=google_config", req.url));
+    }
+
+    // 1) Code -> Tokens
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const tokenJson = await tokenRes.json();
+    if (!tokenRes.ok || !tokenJson?.access_token) {
+      console.error("Google token error:", tokenJson);
+      return NextResponse.redirect(new URL("/login?error=google_token", req.url));
+    }
+
+    // 2) Token -> User profile
+    const profileRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+    });
+    const profile = await profileRes.json();
+
+    const profileEmail = profile?.email as string | undefined;
+    const email = profileEmail?.trim().toLowerCase();
+    if (!email) {
+      return NextResponse.redirect(new URL("/login?error=no_email", req.url));
+    }
+
+    const name = (profile?.name as string | undefined) || email.split("@")[0];
+    const avatarUrl = profile?.picture as string | undefined;
+
+    // 3) Check if user already exists
+    let user = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      orderBy: { id: "asc" },
+    });
+
+    // 4) If not exists -> create tenant + user only on explicit signup intent
+    if (!user) {
+      if (intent !== "signup") {
+        return NextResponse.redirect(new URL("/login?error=google_no_account", req.url));
+      }
+
+      const tenant = await prisma.tenant.create({
+        data: {
+          name: `${name}'s Workspace`,
+          timezone: "Asia/Kolkata",
+        },
+      });
+
+      const randomPassword = crypto.randomUUID();
+      const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+      user = await prisma.user.create({
+        data: {
+          tenantId: tenant.id,
+          name,
+          email,
+          profileImage: avatarUrl,
+          role: "owner",
+          password: hashedPassword,
+          onboardingCompleted: false,
+        },
+      });
+    } else if (!user.profileImage && avatarUrl) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { profileImage: avatarUrl },
+      });
+    }
+
+    // Ensure default tenant settings exist
+    await prisma.tenantSettings.upsert({
+      where: { tenantId: user.tenantId },
+      update: {},
+      create: { tenantId: user.tenantId },
+    });
+
+    const token = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        tenantId: user.tenantId,
+      },
+      jwtSecret,
+      { expiresIn: "7d" }
+    );
+
+    const redirectPath = user.onboardingCompleted ? "/dashboard" : "/onboarding";
+    const response = NextResponse.redirect(new URL(redirectPath, req.url));
+
+    response.cookies.set("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    return response;
+  } catch (err) {
+    console.error("Google callback error:", err);
+    return NextResponse.redirect(new URL("/login?error=google_callback", req.url));
+  }
+}

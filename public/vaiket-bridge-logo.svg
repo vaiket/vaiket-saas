@@ -1,0 +1,29 @@
+<svg width="640" height="160" viewBox="0 0 640 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="vbMarkBg" x1="24" y1="20" x2="132" y2="138" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10B981"/>
+      <stop offset="1" stop-color="#047857"/>
+    </linearGradient>
+    <linearGradient id="vbRing" x1="20" y1="20" x2="136" y2="136" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6EE7B7"/>
+      <stop offset="1" stop-color="#0F766E"/>
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#softGlow)">
+    <path d="M80 10L133 40V100L80 130L27 100V40L80 10Z" fill="url(#vbRing)"/>
+    <path d="M80 18L126 44V96L80 122L34 96V44L80 18Z" fill="url(#vbMarkBg)"/>
+    <text x="80" y="82" text-anchor="middle" fill="#ECFEFF" font-size="44" font-family="Inter, Arial, sans-serif" font-weight="800">VB</text>
+  </g>
+
+  <text x="168" y="70" fill="#F8FAFC" font-size="48" font-family="Inter, Arial, sans-serif" font-weight="700" letter-spacing="1">VAIKET BRIDGE</text>
+  <text x="170" y="112" fill="#94A3B8" font-size="32" font-family="Inter, Arial, sans-serif" font-weight="500">Automation Workspace</text>
+
+  <defs>
+    <filter id="softGlow" x="0" y="0" width="160" height="160" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.0627 0 0 0 0 0.725 0 0 0 0 0.5059 0 0 0 0.32 0"/>
+      <feBlend mode="normal" in2="SourceGraphic" result="shape"/>
+    </filter>
+  </defs>
+</svg>

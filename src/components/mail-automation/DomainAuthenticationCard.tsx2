@@ -1,0 +1,226 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { RefreshCcw, CheckCircle2, AlertCircle, Copy } from "lucide-react";
+
+/* ================= TYPES ================= */
+
+type DNSStatus = "success" | "pending" | "fail";
+
+interface DNSRecord {
+  host: string;
+  type: string;
+  value: string;
+  status: DNSStatus;
+  note: string;
+}
+
+interface Props {
+  domain?: string;
+  enabled?: boolean;
+  onVerified?: () => void;
+}
+
+/* ================= COMPONENT ================= */
+
+export default function DomainAuthenticationCard({
+  domain,
+  enabled = true,
+  onVerified,
+}: Props) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [spf, setSpf] = useState<DNSRecord | null>(null);
+  const [dkim, setDkim] = useState<DNSRecord | null>(null);
+  const [dmarc, setDmarc] = useState<DNSRecord | null>(null);
+
+  /* ================= HELPERS ================= */
+
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const allVerified =
+    spf?.status === "success" &&
+    dkim?.status === "success" &&
+    dmarc?.status === "success";
+
+  /* ================= API ================= */
+
+  const checkDNS = async () => {
+    if (!domain || loading) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(
+        `/api/mail-automation/domain-auth?domain=${domain}`,
+        { cache: "no-store" }
+      );
+
+      if (!res.ok) throw new Error("DNS check failed");
+
+      const data = await res.json();
+
+      setSpf(data.spf || null);
+      setDkim(data.dkim || null);
+      setDmarc(data.dmarc || null);
+
+      const passed =
+        data?.spf?.status === "success" &&
+        data?.dkim?.status === "success" &&
+        data?.dmarc?.status === "success";
+
+      if (passed) {
+        onVerified?.();
+      }
+    } catch (err) {
+      setError("DNS check failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ================= EFFECT ================= */
+
+  useEffect(() => {
+    if (enabled && domain) {
+      checkDNS();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, domain]);
+
+  /* ================= UI HELPERS ================= */
+
+  const StatusIcon = ({ status }: { status: DNSStatus }) => {
+    if (status === "success")
+      return <CheckCircle2 className="text-green-600 h-5 w-5" />;
+    if (status === "fail")
+      return <AlertCircle className="text-red-600 h-5 w-5" />;
+    return <AlertCircle className="text-yellow-500 h-5 w-5" />;
+  };
+
+  const RecordRow = ({
+    title,
+    record,
+  }: {
+    title: string;
+    record: DNSRecord | null;
+  }) => {
+    if (!record) {
+      return (
+        <div className="rounded-xl border p-4 bg-white text-sm text-gray-500">
+          {title} record not available yet.
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border p-4 bg-white">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 font-semibold">
+            <StatusIcon status={record.status} />
+            {title}
+          </div>
+
+          <span
+            className={`text-sm font-medium ${
+              record.status === "success"
+                ? "text-green-600"
+                : record.status === "fail"
+                ? "text-red-600"
+                : "text-yellow-600"
+            }`}
+          >
+            {record.status}
+          </span>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-4 text-sm">
+          <div>
+            <div className="text-gray-500 mb-1">Host / Name</div>
+            <div className="flex items-center gap-2">
+              <code className="bg-gray-100 px-2 py-1 rounded">
+                {record.host}
+              </code>
+              <button onClick={() => copy(record.host)}>
+                <Copy className="h-4 w-4 text-gray-500 hover:text-black" />
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-gray-500 mb-1">Type</div>
+            <code className="bg-gray-100 px-2 py-1 rounded">
+              {record.type}
+            </code>
+          </div>
+
+          <div>
+            <div className="text-gray-500 mb-1">Value</div>
+            <div className="flex items-center gap-2">
+              <code className="bg-gray-100 px-2 py-1 rounded break-all">
+                {record.value}
+              </code>
+              <button onClick={() => copy(record.value)}>
+                <Copy className="h-4 w-4 text-gray-500 hover:text-black" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {record.note && (
+          <p className="text-xs text-gray-500 mt-2">{record.note}</p>
+        )}
+      </div>
+    );
+  };
+
+  /* ================= RENDER ================= */
+
+  return (
+    <section className="rounded-2xl border p-6 bg-gray-50">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-semibold">
+            Step 2: Domain Authentication
+          </h2>
+          <p className="text-sm text-gray-500">
+            Add these DNS records in Hostinger, GoDaddy or Cloudflare.
+          </p>
+        </div>
+
+        <button
+          onClick={checkDNS}
+          disabled={loading || !domain}
+          className="bg-black text-white px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-50"
+        >
+          <RefreshCcw
+            className={loading ? "animate-spin h-4 w-4" : "h-4 w-4"}
+          />
+          Recheck DNS
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <RecordRow title="SPF" record={spf} />
+        <RecordRow title="DKIM" record={dkim} />
+        <RecordRow title="DMARC" record={dmarc} />
+      </div>
+
+      {allVerified && (
+        <p className="text-sm text-green-600 mt-3 font-medium">
+          ✅ Domain authentication completed successfully.
+        </p>
+      )}
+
+      {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+
+      <p className="text-xs text-gray-500 mt-4">
+        ⏳ DNS propagation may take 5–30 minutes (sometimes up to 24 hours).
+      </p>
+    </section>
+  );
+}
