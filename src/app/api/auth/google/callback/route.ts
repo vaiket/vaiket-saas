@@ -16,6 +16,44 @@ type WhatsAppOAuthState = {
   expiresAt: number;
 };
 
+function readText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function getPublicBaseUrl(req: Request) {
+  const envBase = readText(
+    process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.BASE_URL
+  );
+  if (envBase && !/localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(envBase)) {
+    return envBase.replace(/\/+$/g, "");
+  }
+
+  const requestUrl = new URL(req.url);
+  const forwardedProto = readText(req.headers.get("x-forwarded-proto"));
+  const forwardedHost = readText(req.headers.get("x-forwarded-host"));
+  const host = forwardedHost || readText(req.headers.get("host")) || requestUrl.host;
+  const proto = forwardedProto || requestUrl.protocol.replace(":", "");
+  const normalizedHost = host.startsWith("0.0.0.0:")
+    ? host.replace("0.0.0.0", "app.vaiket.com")
+    : host.startsWith("localhost:")
+    ? host.replace("localhost", "app.vaiket.com")
+    : host;
+
+  return `${proto}://${normalizedHost}`;
+}
+
+function getGoogleRedirectUri(req: Request) {
+  const configured = readText(process.env.GOOGLE_REDIRECT_URI);
+  if (configured && !(process.env.NODE_ENV === "production" && /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(configured))) {
+    return configured;
+  }
+
+  return `${getPublicBaseUrl(req)}/api/auth/google/callback`;
+}
+
 function parseOAuthState(raw: string | null): unknown {
   if (!raw) return {};
   try {
@@ -45,6 +83,7 @@ function isWhatsAppState(value: unknown): value is WhatsAppOAuthState {
 }
 
 export async function GET(req: Request) {
+  const appBaseUrl = getPublicBaseUrl(req);
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
@@ -53,7 +92,7 @@ export async function GET(req: Request) {
     // If Meta WhatsApp OAuth callback was accidentally pointed to Google callback,
     // forward it to the dedicated WhatsApp callback route with all query params.
     if (isWhatsAppState(parsedState)) {
-      const target = new URL("/api/whatsapp/connect/callback", req.url);
+      const target = new URL("/api/whatsapp/connect/callback", appBaseUrl);
       target.search = url.search;
       return NextResponse.redirect(target);
     }
@@ -62,16 +101,16 @@ export async function GET(req: Request) {
     const intent = state.intent === "signup" ? "signup" : "login";
 
     if (!code) {
-      return NextResponse.redirect(new URL("/login?error=google_missing_code", req.url));
+      return NextResponse.redirect(new URL("/login?error=google_missing_code", appBaseUrl));
     }
 
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    const redirectUri = getGoogleRedirectUri(req);
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
     const jwtSecret = process.env.JWT_SECRET;
 
     if (!redirectUri || !clientId || !clientSecret || !jwtSecret) {
-      return NextResponse.redirect(new URL("/login?error=google_config", req.url));
+      return NextResponse.redirect(new URL("/login?error=google_config", appBaseUrl));
     }
 
     // 1) Code -> Tokens
@@ -90,7 +129,7 @@ export async function GET(req: Request) {
     const tokenJson = await tokenRes.json();
     if (!tokenRes.ok || !tokenJson?.access_token) {
       console.error("Google token error:", tokenJson);
-      return NextResponse.redirect(new URL("/login?error=google_token", req.url));
+      return NextResponse.redirect(new URL("/login?error=google_token", appBaseUrl));
     }
 
     // 2) Token -> User profile
@@ -102,7 +141,7 @@ export async function GET(req: Request) {
     const profileEmail = profile?.email as string | undefined;
     const email = profileEmail?.trim().toLowerCase();
     if (!email) {
-      return NextResponse.redirect(new URL("/login?error=no_email", req.url));
+      return NextResponse.redirect(new URL("/login?error=no_email", appBaseUrl));
     }
 
     const name = (profile?.name as string | undefined) || email.split("@")[0];
@@ -117,7 +156,7 @@ export async function GET(req: Request) {
     // 4) If not exists -> create tenant + user only on explicit signup intent
     if (!user) {
       if (intent !== "signup") {
-        return NextResponse.redirect(new URL("/login?error=google_no_account", req.url));
+        return NextResponse.redirect(new URL("/login?error=google_no_account", appBaseUrl));
       }
 
       const tenant = await prisma.tenant.create({
@@ -165,8 +204,7 @@ export async function GET(req: Request) {
       { expiresIn: "7d" }
     );
 
-    const redirectPath = user.onboardingCompleted ? "/dashboard" : "/onboarding";
-    const response = NextResponse.redirect(new URL(redirectPath, req.url));
+    const response = NextResponse.redirect(new URL("/dashboard", appBaseUrl));
 
     response.cookies.set("token", token, {
       httpOnly: true,
@@ -179,6 +217,6 @@ export async function GET(req: Request) {
     return response;
   } catch (err) {
     console.error("Google callback error:", err);
-    return NextResponse.redirect(new URL("/login?error=google_callback", req.url));
+    return NextResponse.redirect(new URL("/login?error=google_callback", appBaseUrl));
   }
 }
