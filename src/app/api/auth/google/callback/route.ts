@@ -52,7 +52,7 @@ function getGoogleRedirectUri(req: Request) {
     return configured;
   }
 
-  return `${getPublicBaseUrl(req)}/api/google/callback`;
+  return `${getPublicBaseUrl(req)}/api/auth/google/callback`;
 }
 
 function resolveGoogleRedirectUri(req: Request, state: OAuthState) {

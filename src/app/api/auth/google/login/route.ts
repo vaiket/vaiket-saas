@@ -36,8 +36,7 @@ function getGoogleRedirectUri(req: Request) {
     return configured;
   }
 
-  // Use wrapper callback as canonical URI so old Google Console configs keep working.
-  return `${getPublicBaseUrl(req)}/api/google/callback`;
+  return `${getPublicBaseUrl(req)}/api/auth/google/callback`;
 }
 
 export async function GET(req: Request) {
