@@ -15,6 +15,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Vaiket Bridge",
   description: "Unified automation workspace for Email, WhatsApp, and more.",
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png" }],
+    apple: [{ url: "/apple-touch-icon.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({
