@@ -34,7 +34,7 @@ function readBoolean(value: string | undefined): boolean | null {
 }
 
 function graphVersion() {
-  return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v22.0";
+  return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0";
 }
 
 function isValidE164(value: string) {
@@ -206,10 +206,13 @@ export async function GET(req: Request) {
     checks.push({
       key: "webhook_token",
       label: "Webhook verify token",
-      status: account.webhookVerifyToken ? "pass" : "warn",
+      status:
+        account.webhookVerifyToken || readText(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) ? "pass" : "warn",
       message: account.webhookVerifyToken
-        ? "Webhook verify token is saved."
-        : "Webhook verify token is missing. Meta verification cannot complete.",
+        ? "Webhook verify token is saved on this account."
+        : readText(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN)
+          ? "Using global webhook verify token from environment."
+          : "Webhook verify token is missing. Meta verification cannot complete.",
     });
 
     checks.push({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -36,6 +36,7 @@ type AuthInfo = {
 type SetupInfo = {
   webhookCallbackUrl: string;
   graphApiVersion: string;
+  webhookVerifyToken?: string | null;
 };
 
 type HealthCheck = {
@@ -195,7 +196,8 @@ export default function WhatsAppAccountsPage() {
   });
   const [setupInfo, setSetupInfo] = useState<SetupInfo>({
     webhookCallbackUrl: "",
-    graphApiVersion: "v22.0",
+    graphApiVersion: "v25.0",
+    webhookVerifyToken: null,
   });
   const [healthByAccount, setHealthByAccount] = useState<Record<string, HealthPayload>>({});
   const [healthLoadingByAccount, setHealthLoadingByAccount] = useState<Record<string, boolean>>({});
@@ -218,6 +220,8 @@ export default function WhatsAppAccountsPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [connectResult, setConnectResult] = useState<string | null>(null);
+  const autoConnectOnceRef = useRef(false);
 
   const load = async () => {
     try {
@@ -244,7 +248,8 @@ export default function WhatsAppAccountsPage() {
       setSetupInfo(
         data.setup || {
           webhookCallbackUrl: "",
-          graphApiVersion: "v22.0",
+          graphApiVersion: "v25.0",
+          webhookVerifyToken: null,
         }
       );
     } catch (err) {
@@ -294,6 +299,7 @@ export default function WhatsAppAccountsPage() {
     const params = new URLSearchParams(window.location.search);
     const connect = params.get("connect");
     const reason = params.get("reason") || "";
+    setConnectResult(connect);
 
     const connectMessage =
       connect === "success"
@@ -320,6 +326,30 @@ export default function WhatsAppAccountsPage() {
       if (connectError) setError(connectError);
     })();
   }, []);
+
+  useEffect(() => {
+    const defaultToken = String(setupInfo.webhookVerifyToken || "").trim();
+    if (!defaultToken) return;
+
+    if (!autoWebhookToken.trim()) {
+      setAutoWebhookToken(defaultToken);
+    }
+
+    setForm((prev) => {
+      if (prev.webhookVerifyToken.trim()) return prev;
+      return { ...prev, webhookVerifyToken: defaultToken };
+    });
+  }, [setupInfo.webhookVerifyToken]);
+
+  useEffect(() => {
+    if (autoConnectOnceRef.current) return;
+    if (connectResult !== "success") return;
+    if (!authInfo.canManageAccounts) return;
+    if (autoCandidates.length !== 1) return;
+
+    autoConnectOnceRef.current = true;
+    void autoConnectCandidate(autoCandidates[0]);
+  }, [connectResult, authInfo.canManageAccounts, autoCandidates]);
 
   const copyValue = async (key: string, value: string) => {
     if (!value) return;
@@ -564,6 +594,11 @@ export default function WhatsAppAccountsPage() {
         throw new Error(data.error || "Auto-connect failed");
       }
 
+      const connectedAccountId =
+        data && typeof data.account === "object" && data.account && typeof data.account.id === "string"
+          ? (data.account.id as string)
+          : null;
+
       setMessage(
         autoSaveFetchedToken
           ? "Account auto-connected with fetched token. Run health check and replace with system token for long-term production."
@@ -576,6 +611,9 @@ export default function WhatsAppAccountsPage() {
       setAutoHasToken(false);
 
       await load();
+      if (connectedAccountId) {
+        await runHealthCheck(connectedAccountId);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Auto-connect failed");
     } finally {

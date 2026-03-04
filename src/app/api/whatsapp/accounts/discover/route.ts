@@ -40,7 +40,7 @@ function readText(value: unknown) {
 }
 
 function graphVersion() {
-  return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v22.0";
+  return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0";
 }
 
 function isValidMetaId(value: string) {

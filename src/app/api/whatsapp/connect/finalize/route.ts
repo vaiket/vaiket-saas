@@ -69,7 +69,10 @@ function normalizePhone(value: string) {
 }
 
 function toStatusLabel(params: { accessToken: string | null; webhookVerifyToken: string | null }) {
-  if (params.accessToken && params.webhookVerifyToken) return "connected";
+  const hasWebhookToken =
+    Boolean(params.webhookVerifyToken) || Boolean(readOptional(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN));
+
+  if (params.accessToken && hasWebhookToken) return "connected";
   if (params.accessToken) return "pending_webhook";
   return "pending_token";
 }

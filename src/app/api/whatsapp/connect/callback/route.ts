@@ -51,7 +51,7 @@ function readText(value: unknown) {
 }
 
 function getGraphVersion() {
-  return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v22.0";
+  return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0";
 }
 
 function decodeState(raw: string): OAuthStatePayload | null {

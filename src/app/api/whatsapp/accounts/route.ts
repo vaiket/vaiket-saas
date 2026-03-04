@@ -42,7 +42,12 @@ function getAppBaseUrl(req: Request) {
 }
 
 function toStatusLabel(params: { accessToken: string | null; webhookVerifyToken: string | null }) {
-  if (params.accessToken && params.webhookVerifyToken) return "connected";
+  // Webhook verification can be satisfied either per-account token or a global env token
+  // (Meta only needs one verify token for the callback URL).
+  const hasWebhookToken =
+    Boolean(params.webhookVerifyToken) || Boolean(readOptional(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN));
+
+  if (params.accessToken && hasWebhookToken) return "connected";
   if (params.accessToken) return "pending_webhook";
   return "pending_token";
 }
@@ -118,7 +123,8 @@ export async function GET(req: Request) {
     },
     setup: {
       webhookCallbackUrl,
-      graphApiVersion: readRequired(process.env.WHATSAPP_GRAPH_API_VERSION) || "v22.0",
+      graphApiVersion: readRequired(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0",
+      webhookVerifyToken: readOptional(process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN),
     },
   });
 }

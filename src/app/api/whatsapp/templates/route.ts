@@ -105,7 +105,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const apiVersion = readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v22.0";
+    const apiVersion = readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0";
     const endpoint = `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(
       account.wabaId
     )}/message_templates?fields=name,status,category,language&limit=250`;
