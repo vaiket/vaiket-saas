@@ -9,6 +9,14 @@ import { getClientMeta } from "@/lib/auth/session";
 
 export async function POST(req: Request) {
   try {
+    if (!process.env.JWT_SECRET) {
+      console.error("[auth/login] Missing JWT_SECRET");
+      return NextResponse.json(
+        { success: false, error: "Server misconfigured", code: "missing_jwt_secret" },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     const email = String(body?.email ?? "").trim().toLowerCase();
     const password = String(body?.password ?? "");
@@ -112,8 +120,9 @@ export async function POST(req: Request) {
 
   } catch (err) {
     console.error("Login Error:", err);
+    const code = err instanceof Error ? err.name : "unknown_error";
     return NextResponse.json(
-      { success: false, error: "Server Error" },
+      { success: false, error: "Server Error", code },
       { status: 500 }
     );
   }
