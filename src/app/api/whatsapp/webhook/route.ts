@@ -44,6 +44,25 @@ function asArray<T = Record<string, unknown>>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+function normalizeEntries(body: Record<string, unknown>) {
+  const entries = asArray<Record<string, unknown>>(body.entry);
+  if (entries.length > 0) return entries;
+
+  // Meta's "Test" UI can send only the change object: { field, value }.
+  const field = readText(body.field);
+  const value = body.value;
+  if (field && value && typeof value === "object") {
+    return [{ changes: [{ field, value }] }];
+  }
+
+  const changes = asArray<Record<string, unknown>>(body.changes);
+  if (changes.length > 0) {
+    return [{ changes }];
+  }
+
+  return [];
+}
+
 function readText(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -597,12 +616,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const object = readText(body.object);
+  const recordBody = asRecord(body);
+  const object = readText(recordBody.object);
   if (object && object !== "whatsapp_business_account") {
     return new NextResponse("EVENT_RECEIVED", { status: 200 });
   }
 
-  const entries = asArray(body.entry);
+  const entries = normalizeEntries(recordBody);
 
   for (const entry of entries) {
     const changes = asArray(entry.changes);
