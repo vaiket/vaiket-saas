@@ -172,6 +172,18 @@ function humanizeConnectReason(reason: string) {
   const raw = decodeURIComponent(reason || "").trim();
   if (!raw) return "Facebook connect failed. Please try again.";
 
+  const lower = raw.toLowerCase();
+  if (lower.includes("invalid scopes") || lower.includes("invalid scope")) {
+    if (lower.includes("business_management")) {
+      return "Invalid scope `business_management`. Remove it from META_OAUTH_SCOPES (keep only whatsapp_business_management, whatsapp_business_messaging), then connect again.";
+    }
+    return "Facebook rejected one of the requested permissions. Check META_OAUTH_SCOPES and try again.";
+  }
+
+  if (lower.includes("missing permission") || lower.includes("#100")) {
+    return "Meta Graph API returned (#100) Missing Permission. Connect using a Facebook user who is admin of the Business Manager/WABA, and ensure scopes include whatsapp_business_management + whatsapp_business_messaging.";
+  }
+
   if (raw === "config_error" || raw === "meta_config_missing") {
     return "Meta app config missing. Add META_APP_ID and META_APP_SECRET in environment.";
   }

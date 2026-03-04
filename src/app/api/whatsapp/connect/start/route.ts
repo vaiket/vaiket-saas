@@ -19,14 +19,45 @@ function getGraphVersion() {
   return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0";
 }
 
+function isTruthy(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "y";
+}
+
+function normalizeOAuthScopes(raw: string) {
+  // WhatsApp Cloud API onboarding should work with these two scopes.
+  // `business_management` often triggers "Invalid Scopes" unless the app has access,
+  // so we strip it unless explicitly enabled.
+  const allowBusinessManagement = isTruthy(readText(process.env.META_ALLOW_BUSINESS_MANAGEMENT));
+
+  const parts = raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const required = ["whatsapp_business_management", "whatsapp_business_messaging"];
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  for (const scope of required) {
+    seen.add(scope);
+    out.push(scope);
+  }
+
+  for (const scope of parts) {
+    if (!allowBusinessManagement && scope === "business_management") continue;
+    if (seen.has(scope)) continue;
+    seen.add(scope);
+    out.push(scope);
+  }
+
+  return out.join(",");
+}
+
 function getOAuthScopes() {
   const configured = readText(process.env.META_OAUTH_SCOPES);
   if (configured) {
-    return configured
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .join(",");
+    return normalizeOAuthScopes(configured);
   }
 
   // Production default: management + send permissions.

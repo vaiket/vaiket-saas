@@ -368,73 +368,77 @@ export async function GET(req: Request) {
   const meRes = await graphGet(accessToken, "/me", { fields: "id,name" });
   const meData = (meRes.data || {}) as Record<string, unknown>;
 
-  const businessesRes = await graphGet(accessToken, "/me/businesses", {
-    fields: "id,name",
-    limit: "12",
-  });
-
   const candidatesBucket: ConnectCandidate[] = [];
   const wabaFields =
     "id,name,phone_numbers{id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status}";
 
-  if (businessesRes.ok) {
-    const businesses = asArray<Record<string, unknown>>(businessesRes.data?.data)
-      .map((item) => ({
-        id: readText(item.id),
-        name: readText(item.name) || "Business",
-      }))
-      .filter((item) => item.id);
+  // Prefer user-level WhatsApp account edges. These generally work with only
+  // `whatsapp_business_management` / `whatsapp_business_messaging`.
+  const fallbackBusiness: BusinessRow = {
+    id: readText(meData.id) || "me",
+    name: readText(meData.name) || "Meta Account",
+  };
 
-    for (const business of businesses) {
-      const owned = await graphGet(accessToken, `/${business.id}/owned_whatsapp_business_accounts`, {
-        fields: wabaFields,
-        limit: "25",
-      });
-      if (owned.ok) {
-        candidatesBucket.push(...parseCandidates("owned", business, owned.data));
-      }
+  const ownedFallback = await graphGet(accessToken, "/me/owned_whatsapp_business_accounts", {
+    fields: wabaFields,
+    limit: "25",
+  });
+  if (ownedFallback.ok) {
+    candidatesBucket.push(...parseCandidates("owned", fallbackBusiness, ownedFallback.data));
+  }
 
-      const client = await graphGet(accessToken, `/${business.id}/client_whatsapp_business_accounts`, {
-        fields: wabaFields,
-        limit: "25",
-      });
-      if (client.ok) {
-        candidatesBucket.push(...parseCandidates("client", business, client.data));
-      }
-    }
-  } else {
-    // Fallback for apps where business_management is unavailable:
-    // try direct user-level WhatsApp account edges.
-    const fallbackBusiness: BusinessRow = {
-      id: readText(meData.id) || "me",
-      name: readText(meData.name) || "Meta Account",
-    };
+  const clientFallback = await graphGet(accessToken, "/me/client_whatsapp_business_accounts", {
+    fields: wabaFields,
+    limit: "25",
+  });
+  if (clientFallback.ok) {
+    candidatesBucket.push(...parseCandidates("client", fallbackBusiness, clientFallback.data));
+  }
 
-    const ownedFallback = await graphGet(accessToken, "/me/owned_whatsapp_business_accounts", {
-      fields: wabaFields,
-      limit: "25",
+  // Only if nothing is found, try business portfolio edges (may require `business_management`).
+  let businessesRes: GraphResponse | null = null;
+  if (candidatesBucket.length === 0) {
+    businessesRes = await graphGet(accessToken, "/me/businesses", {
+      fields: "id,name",
+      limit: "12",
     });
-    if (ownedFallback.ok) {
-      candidatesBucket.push(...parseCandidates("owned", fallbackBusiness, ownedFallback.data));
-    }
 
-    const clientFallback = await graphGet(accessToken, "/me/client_whatsapp_business_accounts", {
-      fields: wabaFields,
-      limit: "25",
-    });
-    if (clientFallback.ok) {
-      candidatesBucket.push(...parseCandidates("client", fallbackBusiness, clientFallback.data));
+    if (businessesRes.ok) {
+      const businesses = asArray<Record<string, unknown>>(businessesRes.data?.data)
+        .map((item) => ({
+          id: readText(item.id),
+          name: readText(item.name) || "Business",
+        }))
+        .filter((item) => item.id);
+
+      for (const business of businesses) {
+        const owned = await graphGet(accessToken, `/${business.id}/owned_whatsapp_business_accounts`, {
+          fields: wabaFields,
+          limit: "25",
+        });
+        if (owned.ok) {
+          candidatesBucket.push(...parseCandidates("owned", business, owned.data));
+        }
+
+        const client = await graphGet(accessToken, `/${business.id}/client_whatsapp_business_accounts`, {
+          fields: wabaFields,
+          limit: "25",
+        });
+        if (client.ok) {
+          candidatesBucket.push(...parseCandidates("client", business, client.data));
+        }
+      }
     }
   }
 
   const candidates = dedupeCandidates(candidatesBucket);
   if (candidates.length === 0) {
+    const errorReason =
+      ownedFallback.error || clientFallback.error || businessesRes?.error || "no_whatsapp_accounts_found";
     return clearStateAndRedirect(
       redirectToAccounts(req, {
         connect: "error",
-        reason: businessesRes.ok
-          ? "no_whatsapp_accounts_found"
-          : businessesRes.error || "no_whatsapp_accounts_found",
+        reason: errorReason,
       })
     );
   }
