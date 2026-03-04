@@ -22,7 +22,7 @@ type MetaSendResult = {
   raw: unknown;
 };
 
-const DEFAULT_GRAPH_API_VERSION = "v21.0";
+const DEFAULT_GRAPH_API_VERSION = "v25.0";
 const DEFAULT_TIMEOUT_MS = 12_000;
 const DEFAULT_MAX_RETRIES = 2;
 const MAX_RETRY_DELAY_MS = 8_000;
