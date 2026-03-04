@@ -15,9 +15,13 @@ type SendMessagesBody = {
   scheduleAt?: unknown;
   recurringEnabled?: unknown;
   recurringRule?: unknown;
+  templateComponentsByPhone?: unknown;
 };
 
 const MAX_NUMBERS = 5000;
+const MAX_TEMPLATE_COMPONENTS_PER_MESSAGE = 5;
+const MAX_TEMPLATE_PARAMETERS_PER_COMPONENT = 10;
+const MAX_TEMPLATE_PARAM_TEXT_LENGTH = 500;
 
 function normalizePhone(raw: string) {
   return raw.trim().replace(/[^\d+]/g, "");
@@ -43,6 +47,63 @@ function parseDate(raw: unknown): Date | null {
   const date = new Date(text);
   if (Number.isNaN(date.getTime())) return null;
   return date;
+}
+
+function sanitizeTemplateComponents(input: unknown): Array<Record<string, unknown>> | null {
+  if (!Array.isArray(input)) return null;
+
+  const sanitized: Array<Record<string, unknown>> = [];
+  for (const rawComponent of input.slice(0, MAX_TEMPLATE_COMPONENTS_PER_MESSAGE)) {
+    if (!rawComponent || typeof rawComponent !== "object") continue;
+
+    const row = rawComponent as Record<string, unknown>;
+    const type = String(row.type ?? "").trim().toLowerCase();
+    if (!type) continue;
+
+    const rawParams = Array.isArray(row.parameters) ? row.parameters : [];
+    const parameters: Array<Record<string, unknown>> = [];
+    for (const rawParam of rawParams.slice(0, MAX_TEMPLATE_PARAMETERS_PER_COMPONENT)) {
+      if (!rawParam || typeof rawParam !== "object") continue;
+      const param = rawParam as Record<string, unknown>;
+      const paramType = String(param.type ?? "").trim().toLowerCase();
+      if (paramType !== "text") continue;
+
+      const text = String(param.text ?? "").trim();
+      if (!text) continue;
+
+      parameters.push({
+        type: "text",
+        text: text.slice(0, MAX_TEMPLATE_PARAM_TEXT_LENGTH),
+      });
+    }
+
+    if (parameters.length === 0) continue;
+
+    sanitized.push({
+      type,
+      parameters,
+    });
+  }
+
+  return sanitized.length > 0 ? sanitized : null;
+}
+
+function parseTemplateComponentsByPhone(input: unknown) {
+  const map = new Map<string, Array<Record<string, unknown>>>();
+  if (!input || typeof input !== "object" || Array.isArray(input)) return map;
+
+  const entries = Object.entries(input as Record<string, unknown>);
+  for (const [rawPhone, rawComponents] of entries) {
+    const phone = normalizePhone(rawPhone);
+    if (!phone) continue;
+
+    const components = sanitizeTemplateComponents(rawComponents);
+    if (!components) continue;
+
+    map.set(phone, components);
+  }
+
+  return map;
 }
 
 async function readJsonSafe(req: Request): Promise<SendMessagesBody | null> {
@@ -80,6 +141,7 @@ export async function POST(req: Request) {
     const recurringEnabled = Boolean(body.recurringEnabled);
     const recurringRule = String(body.recurringRule ?? "").trim() || null;
     const scheduleAt = parseDate(body.scheduleAt);
+    const templateComponentsByPhone = parseTemplateComponentsByPhone(body.templateComponentsByPhone);
 
     if (!accountId || !templateKey || !numbersText) {
       return NextResponse.json(
@@ -127,9 +189,11 @@ export async function POST(req: Request) {
     }
 
     const now = new Date();
-    const initialStatus =
-      scheduleEnabled && scheduleAt && scheduleAt.getTime() > now.getTime() ? "scheduled" : "queued";
-    const shouldSendNow = !scheduleEnabled && !recurringEnabled;
+    const isScheduledForFuture = Boolean(
+      scheduleEnabled && scheduleAt && scheduleAt.getTime() > now.getTime()
+    );
+    const initialStatus = isScheduledForFuture ? "scheduled" : "queued";
+    const shouldSendNow = !recurringEnabled && !isScheduledForFuture;
 
     if (shouldSendNow && (!account.accessToken || !account.phoneNumberId)) {
       return NextResponse.json(
@@ -142,7 +206,7 @@ export async function POST(req: Request) {
     }
 
     let queued = 0;
-    const createdMessages: Array<{ id: string; to: string }> = [];
+    const createdMessages: Array<{ id: string; to: string; components: Array<Record<string, unknown>> | null }> = [];
 
     for (const phone of parsed.unique) {
       const contact = await prisma.waContact.upsert({
@@ -188,6 +252,8 @@ export async function POST(req: Request) {
         },
       });
 
+      const componentsForPhone = templateComponentsByPhone.get(phone) || null;
+
       const created = await prisma.waMessage.create({
         data: {
           tenantId: auth.tenantId,
@@ -202,6 +268,7 @@ export async function POST(req: Request) {
             scheduleAt: scheduleAt ? scheduleAt.toISOString() : null,
             recurringEnabled,
             recurringRule,
+            templateComponents: componentsForPhone,
           }),
           status: shouldSendNow ? "processing" : initialStatus,
           sentByUserId: auth.userId,
@@ -219,6 +286,7 @@ export async function POST(req: Request) {
       createdMessages.push({
         id: created.id,
         to: phone,
+        components: componentsForPhone,
       });
       queued += 1;
     }
@@ -241,6 +309,7 @@ export async function POST(req: Request) {
                 to: item.to,
                 templateName: templateKey,
                 languageCode: templateLanguage,
+                components: item.components || undefined,
               });
 
               await prisma.waMessage.update({
@@ -289,6 +358,8 @@ export async function POST(req: Request) {
         scheduleAt: scheduleAt ? scheduleAt.toISOString() : null,
         recurringEnabled,
         recurringRule,
+        templateComponentsMappedRecipients: templateComponentsByPhone.size,
+        templateComponentsApplied: templateComponentsByPhone.size > 0,
       },
       req,
     });
@@ -301,6 +372,7 @@ export async function POST(req: Request) {
       totalInput: parsed.totalInput,
       uniqueNumbers: parsed.unique.length,
       duplicatesRemoved: parsed.duplicatesRemoved,
+      templateComponentsMappedRecipients: templateComponentsByPhone.size,
       status: shouldSendNow ? (failed > 0 ? "partial_failed" : "sent") : initialStatus,
       ...(firstError ? { warning: firstError } : {}),
     });

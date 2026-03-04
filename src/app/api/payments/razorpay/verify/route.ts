@@ -262,20 +262,60 @@ export async function POST(req: Request) {
         );
       }
 
+      if (subscription.status === "active") {
+        return NextResponse.json({
+          success: true,
+          checkoutMode: "trial_autopay",
+          alreadyActive: true,
+          subscription: {
+            id: subscription.id,
+            planKey: subscription.planKey,
+            product: getPlanProduct(subscription.planKey),
+            status: subscription.status,
+            billingCycle: subscription.billingCycle,
+            endsAt: subscription.endsAt,
+          },
+        });
+      }
+
+      const startedAt = new Date();
+      const endsAt = resolveTrialEndsAt(startedAt);
+      const refundResult = await tryRefundTrialCharge({
+        paymentId,
+        authHeader: authHeader.authHeader,
+        localSubscriptionId: subscription.id,
+      });
+
+      const updated = await prisma.userSubscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: "active",
+          startedAt,
+          endsAt,
+          amountPaid: 0,
+          paymentRef: autopaySubscriptionId,
+        },
+      });
+
       await prisma.paymentLog.create({
         data: {
           tenantId: auth.tenantId,
           userId: auth.userId,
           provider: "razorpay",
           providerRef: paymentId,
-          amount: 0,
+          amount: TRIAL_AUTOPAY_CHARGE_INR,
           currency: "INR",
           status: "success",
           meta: {
             event: "mandate_authorized",
             checkoutMode: "trial_autopay",
-            localSubscriptionId: subscription.id,
+            localSubscriptionId: updated.id,
             autopaySubscriptionId,
+            trialDays: TRIAL_AUTOPAY_TRIAL_DAYS,
+            trialChargeInr: TRIAL_AUTOPAY_CHARGE_INR,
+            trialRefunded: refundResult.success,
+            refundId: refundResult.refundId,
+            refundError: refundResult.error,
             recurringAmountInr: TRIAL_AUTOPAY_RECURRING_INR,
           },
         },
@@ -285,13 +325,16 @@ export async function POST(req: Request) {
         success: true,
         checkoutMode: "trial_autopay",
         autopayAuthorized: true,
+        trialRefunded: refundResult.success,
+        trialRefundId: refundResult.refundId,
+        trialRefundError: refundResult.error,
         subscription: {
-          id: subscription.id,
-          planKey: subscription.planKey,
-          product: getPlanProduct(subscription.planKey),
-          status: subscription.status,
-          billingCycle: subscription.billingCycle,
-          endsAt: subscription.endsAt,
+          id: updated.id,
+          planKey: updated.planKey,
+          product: getPlanProduct(updated.planKey),
+          status: updated.status,
+          billingCycle: updated.billingCycle,
+          endsAt: updated.endsAt,
         },
       });
     }

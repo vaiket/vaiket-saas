@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
-import PDFDocument from "pdfkit";
+import PDFDocument from "pdfkit/js/pdfkit.standalone";
 
 export async function GET(
   req: Request,
@@ -32,7 +32,7 @@ export async function GET(
       );
 
     // ✅ Verify token
-    let decoded: any;
+    let decoded: jwt.JwtPayload | string;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET!);
     } catch {
@@ -42,7 +42,12 @@ export async function GET(
       );
     }
 
-    const { tenantId } = decoded;
+    const tenantId =
+      typeof decoded === "string"
+        ? null
+        : decoded?.tenantId !== undefined
+          ? String(decoded.tenantId)
+          : null;
 
     // ✅ Fetch transaction
     const tx = await prisma.transactions.findUnique({

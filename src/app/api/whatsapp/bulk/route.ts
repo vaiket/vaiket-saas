@@ -9,7 +9,36 @@ type BulkSendBody = {
   accountId?: unknown;
   contactIds?: unknown;
   text?: unknown;
+  numbersText?: unknown;
 };
+
+const MAX_MANUAL_NUMBERS = 1000;
+
+function normalizePhone(raw: string) {
+  return raw.trim().replace(/[^\d+]/g, "");
+}
+
+function parseNumbers(raw: string) {
+  const parts = raw
+    .split(/\r?\n|,|;/g)
+    .map((item) => normalizePhone(item))
+    .filter(Boolean);
+
+  const unique = Array.from(new Set(parts));
+  return {
+    unique,
+    totalInput: parts.length,
+    duplicatesRemoved: parts.length - unique.length,
+  };
+}
+
+async function readJsonSafe(req: Request): Promise<BulkSendBody | null> {
+  try {
+    return (await req.json()) as BulkSendBody;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: Request) {
   const auth = await getAuthContext(req);
@@ -24,9 +53,14 @@ export async function POST(req: Request) {
   const subscriptionBlocked = await ensureWhatsAppSubscriptionAccess(auth);
   if (subscriptionBlocked) return subscriptionBlocked;
 
-  const body = (await req.json()) as BulkSendBody;
+  const body = await readJsonSafe(req);
+  if (!body) {
+    return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
+  }
+
   const accountId = String(body.accountId ?? "").trim();
   const text = String(body.text ?? "").trim();
+  const numbersText = String(body.numbersText ?? "").trim();
 
   const ids = Array.isArray(body.contactIds)
     ? body.contactIds
@@ -41,6 +75,21 @@ export async function POST(req: Request) {
     );
   }
 
+  const parsedNumbers = parseNumbers(numbersText);
+  if (parsedNumbers.unique.length > MAX_MANUAL_NUMBERS) {
+    return NextResponse.json(
+      { success: false, error: `Max ${MAX_MANUAL_NUMBERS} manual numbers allowed` },
+      { status: 400 }
+    );
+  }
+
+  if (ids.length === 0 && parsedNumbers.unique.length === 0) {
+    return NextResponse.json(
+      { success: false, error: "Select contacts or provide manual numbers" },
+      { status: 400 }
+    );
+  }
+
   const account = await prisma.waAccount.findFirst({
     where: { id: accountId, tenantId: auth.tenantId },
     select: { id: true },
@@ -50,19 +99,53 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: "Account not found" }, { status: 404 });
   }
 
-  const contacts = await prisma.waContact.findMany({
-    where: {
-      tenantId: auth.tenantId,
-      optedIn: true,
-      ...(ids.length > 0 ? { id: { in: ids } } : {}),
-    },
-    select: {
-      id: true,
-      phone: true,
-    },
-    take: 1000,
-  });
+  const selectedContacts =
+    ids.length > 0
+      ? await prisma.waContact.findMany({
+          where: {
+            tenantId: auth.tenantId,
+            optedIn: true,
+            id: { in: ids },
+          },
+          select: {
+            id: true,
+            phone: true,
+          },
+          take: 1000,
+        })
+      : [];
 
+  const recipientMap = new Map<string, { id: string; phone: string }>();
+  for (const contact of selectedContacts) {
+    recipientMap.set(contact.id, contact);
+  }
+
+  for (const phone of parsedNumbers.unique) {
+    const contact = await prisma.waContact.upsert({
+      where: {
+        tenantId_phone: {
+          tenantId: auth.tenantId,
+          phone,
+        },
+      },
+      create: {
+        tenantId: auth.tenantId,
+        phone,
+        optedIn: true,
+        source: "bulk_manual",
+      },
+      update: {
+        optedIn: true,
+      },
+      select: {
+        id: true,
+        phone: true,
+      },
+    });
+    recipientMap.set(contact.id, contact);
+  }
+
+  const contacts = Array.from(recipientMap.values());
   if (contacts.length === 0) {
     return NextResponse.json(
       { success: false, error: "No opted-in contacts found" },
@@ -128,6 +211,9 @@ export async function POST(req: Request) {
     meta: {
       accountId,
       recipients: queued,
+      selectedContacts: selectedContacts.length,
+      manualNumbers: parsedNumbers.unique.length,
+      manualDuplicatesRemoved: parsedNumbers.duplicatesRemoved,
     },
     req,
   });
@@ -135,5 +221,8 @@ export async function POST(req: Request) {
   return NextResponse.json({
     success: true,
     queued,
+    selectedContacts: selectedContacts.length,
+    manualNumbers: parsedNumbers.unique.length,
+    manualDuplicatesRemoved: parsedNumbers.duplicatesRemoved,
   });
 }

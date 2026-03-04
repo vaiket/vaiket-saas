@@ -20,7 +20,6 @@ import {
   Settings,
   Smartphone,
   Sparkles,
-  TrendingUp,
   User,
   UserPlus,
   Users,
@@ -303,8 +302,6 @@ const MENU_GROUPS: MenuGroup[] = [
         path: "/dashboard/users-management",
         icon: <Users className="h-5 w-5" />,
       },
-      { name: "Leads", path: "/dashboard/leads", icon: <TrendingUp className="h-5 w-5" /> },
-      { name: "Campaigns", path: "/dashboard/campaigns", icon: <BarChart3 className="h-5 w-5" /> },
     ],
   },
   {

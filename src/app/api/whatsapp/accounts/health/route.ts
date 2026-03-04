@@ -25,6 +25,14 @@ function readText(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function readBoolean(value: string | undefined): boolean | null {
+  const text = readText(value).toLowerCase();
+  if (!text) return null;
+  if (text === "1" || text === "true" || text === "yes" || text === "on") return true;
+  if (text === "0" || text === "false" || text === "no" || text === "off") return false;
+  return null;
+}
+
 function graphVersion() {
   return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v22.0";
 }
@@ -122,6 +130,12 @@ function countByStatus(checks: HealthCheck[], status: CheckStatus) {
   return checks.filter((item) => item.status === status).length;
 }
 
+function requiresWebhookSignature() {
+  const explicit = readBoolean(process.env.WHATSAPP_WEBHOOK_REQUIRE_SIGNATURE);
+  if (explicit !== null) return explicit;
+  return process.env.NODE_ENV === "production";
+}
+
 export async function GET(req: Request) {
   try {
     const auth = await getAuthContext(req);
@@ -206,6 +220,21 @@ export async function GET(req: Request) {
         ? "Using localhost callback URL. Use a public HTTPS domain in production."
         : "Callback URL looks public.",
       detail: webhookCallbackUrl,
+    });
+
+    const signatureRequired = requiresWebhookSignature();
+    const hasWebhookAppSecret = Boolean(
+      readText(process.env.WHATSAPP_WEBHOOK_APP_SECRET) || readText(process.env.META_APP_SECRET)
+    );
+    checks.push({
+      key: "webhook_signature",
+      label: "Webhook signature validation",
+      status: hasWebhookAppSecret ? "pass" : signatureRequired ? "fail" : "warn",
+      message: hasWebhookAppSecret
+        ? "App secret is available for validating x-hub-signature-256."
+        : signatureRequired
+          ? "Missing META_APP_SECRET/WHATSAPP_WEBHOOK_APP_SECRET while signature validation is required."
+          : "Signature validation is optional here; set WHATSAPP_WEBHOOK_APP_SECRET for stricter security.",
     });
 
     let remotePhone: GraphResponse | null = null;

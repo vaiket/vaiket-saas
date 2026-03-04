@@ -30,6 +30,7 @@ import {
   MessageSquare,
   RefreshCw,
   Rocket,
+  Search,
   Server,
   ShieldCheck,
   Sparkles,
@@ -97,6 +98,55 @@ type EmailItem = {
   sender?: string;
   subject?: string;
   createdAt?: string;
+};
+
+type MailPreviewContact = {
+  email: string;
+  lastMessage: string | null;
+  lastAt: string | null;
+};
+
+type MailPreviewMessage = {
+  id: string;
+  direction: "in" | "out";
+  subject?: string | null;
+  body?: string | null;
+  createdAt: string;
+  status?: string | null;
+};
+
+type WaConversation = {
+  id: string;
+  status: string;
+  lastMessageAt: string | null;
+  account: {
+    id: string;
+    name: string;
+    phoneNumber: string;
+  };
+  contact: {
+    id: string;
+    name: string | null;
+    phone: string;
+    tags: string[];
+    optedIn: boolean;
+  };
+  messages: Array<{
+    id: string;
+    direction: string;
+    text: string | null;
+    status: string;
+    createdAt: string;
+  }>;
+};
+
+type WaMessage = {
+  id: string;
+  direction: string;
+  messageType: string;
+  text: string | null;
+  status: string;
+  createdAt: string;
 };
 
 type AppUser = {
@@ -206,6 +256,25 @@ export default function DashboardPage() {
   const [emails, setEmails] = useState<EmailItem[]>([]);
   const [user, setUser] = useState<AppUser | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [waConversations, setWaConversations] = useState<WaConversation[]>([]);
+  const [waSelectedConversationId, setWaSelectedConversationId] = useState("");
+  const [waMessages, setWaMessages] = useState<WaMessage[]>([]);
+  const [waQuery, setWaQuery] = useState("");
+  const [waText, setWaText] = useState("");
+  const [waLoadingConversations, setWaLoadingConversations] = useState(true);
+  const [waLoadingMessages, setWaLoadingMessages] = useState(false);
+  const [waSending, setWaSending] = useState(false);
+  const [waError, setWaError] = useState<string | null>(null);
+  const [mailContacts, setMailContacts] = useState<MailPreviewContact[]>([]);
+  const [mailSelectedEmail, setMailSelectedEmail] = useState("");
+  const [mailMessages, setMailMessages] = useState<MailPreviewMessage[]>([]);
+  const [mailQuery, setMailQuery] = useState("");
+  const [mailSubject, setMailSubject] = useState("");
+  const [mailBody, setMailBody] = useState("");
+  const [mailLoadingContacts, setMailLoadingContacts] = useState(true);
+  const [mailLoadingMessages, setMailLoadingMessages] = useState(false);
+  const [mailSending, setMailSending] = useState(false);
+  const [mailError, setMailError] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async (silent = false) => {
     if (silent) {
@@ -285,7 +354,7 @@ export default function DashboardPage() {
         },
       ],
     };
-  }, [stats?.traffic]);
+  }, [stats]);
 
   const emailChartData = useMemo(() => {
     const emailSeries = stats?.emails?.length ? stats.emails : sampleStats().emails;
@@ -301,23 +370,23 @@ export default function DashboardPage() {
         },
       ],
     };
-  }, [stats?.emails]);
+  }, [stats]);
 
-  const aiUsageChartData = useMemo(
-    () => ({
+  const aiUsageChartData = useMemo(() => {
+    const usage = stats?.aiUsage ?? sampleStats().aiUsage;
+    return {
       labels: ["OpenAI", "DeepSeek", "Gemini", "Claude"],
       datasets: [
         {
-          data: [aiUsage.openai, aiUsage.deepseek, aiUsage.gemini, aiUsage.claude],
+          data: [usage.openai, usage.deepseek, usage.gemini, usage.claude],
           backgroundColor: ["#2563eb", "#0f766e", "#8b5cf6", "#f59e0b"],
           borderColor: "#ffffff",
           borderWidth: 3,
           hoverOffset: 5,
         },
       ],
-    }),
-    [aiUsage]
-  );
+    };
+  }, [stats]);
 
   const visitorsChange = getTrendFromSeries(stats?.traffic?.map((item) => item.visits) ?? []);
   const emailChange = getTrendFromSeries(stats?.emails?.map((item) => item.count) ?? []);
@@ -364,6 +433,300 @@ export default function DashboardPage() {
       iconClass: "from-slate-700 to-slate-500",
     },
   ] as const;
+
+  const waSelectedConversation = useMemo(
+    () => waConversations.find((item) => item.id === waSelectedConversationId) || null,
+    [waConversations, waSelectedConversationId]
+  );
+
+  const waFilteredConversations = useMemo(() => {
+    const query = waQuery.trim().toLowerCase();
+    if (!query) return waConversations;
+    return waConversations.filter((item) => {
+      const name = (item.contact.name || "").toLowerCase();
+      const phone = item.contact.phone.toLowerCase();
+      const preview = (item.messages[0]?.text || "").toLowerCase();
+      const account = item.account.name.toLowerCase();
+      return (
+        name.includes(query) ||
+        phone.includes(query) ||
+        preview.includes(query) ||
+        account.includes(query)
+      );
+    });
+  }, [waConversations, waQuery]);
+
+  const mailFilteredContacts = useMemo(() => {
+    const query = mailQuery.trim().toLowerCase();
+    if (!query) return mailContacts;
+    return mailContacts.filter((item) => item.email.toLowerCase().includes(query));
+  }, [mailContacts, mailQuery]);
+
+  const loadWaConversations = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    try {
+      if (!silent) {
+        setWaLoadingConversations(true);
+        setWaError(null);
+      }
+
+      const res = await fetch("/api/whatsapp/inbox/conversations", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await readJsonSafeResponse(res);
+      if (!res.ok || !data.success) {
+        throw new Error(asText(data.error) || "Failed to load WhatsApp conversations");
+      }
+
+      const next = (Array.isArray(data.conversations) ? data.conversations : []) as WaConversation[];
+      setWaConversations(next);
+      setWaSelectedConversationId((prev) => {
+        if (!next.length) return "";
+        if (prev && next.some((item) => item.id === prev)) return prev;
+        return next[0].id;
+      });
+    } catch (error) {
+      if (!silent) {
+        setWaError(error instanceof Error ? error.message : "Failed to load WhatsApp conversations");
+      }
+    } finally {
+      if (!silent) {
+        setWaLoadingConversations(false);
+      }
+    }
+  }, []);
+
+  const loadWaMessages = useCallback(async (conversationId: string, opts?: { silent?: boolean }) => {
+    if (!conversationId) return;
+    const silent = Boolean(opts?.silent);
+    try {
+      if (!silent) {
+        setWaLoadingMessages(true);
+        setWaError(null);
+      }
+
+      const endpoint = `/api/whatsapp/inbox/messages?conversationId=${encodeURIComponent(
+        conversationId
+      )}`;
+      const res = await fetch(endpoint, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await readJsonSafeResponse(res);
+      if (!res.ok || !data.success) {
+        throw new Error(asText(data.error) || "Failed to load WhatsApp messages");
+      }
+
+      const next = (Array.isArray(data.messages) ? data.messages : []) as WaMessage[];
+      setWaMessages(next);
+    } catch (error) {
+      if (!silent) {
+        setWaError(error instanceof Error ? error.message : "Failed to load WhatsApp messages");
+      }
+    } finally {
+      if (!silent) {
+        setWaLoadingMessages(false);
+      }
+    }
+  }, []);
+
+  const sendWaMessage = useCallback(async () => {
+    const conversationId = waSelectedConversationId;
+    const messageText = waText.trim();
+    if (!conversationId || !messageText) return;
+
+    try {
+      setWaSending(true);
+      setWaError(null);
+
+      const res = await fetch("/api/whatsapp/inbox/messages", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId,
+          text: messageText,
+        }),
+      });
+      const data = await readJsonSafeResponse(res);
+      if (!res.ok || !data.success) {
+        throw new Error(asText(data.error) || "Failed to send WhatsApp message");
+      }
+
+      setWaText("");
+      await Promise.all([
+        loadWaMessages(conversationId),
+        loadWaConversations({ silent: true }),
+      ]);
+    } catch (error) {
+      setWaError(error instanceof Error ? error.message : "Failed to send WhatsApp message");
+    } finally {
+      setWaSending(false);
+    }
+  }, [waSelectedConversationId, waText, loadWaMessages, loadWaConversations]);
+
+  const loadMailContacts = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    try {
+      if (!silent) {
+        setMailLoadingContacts(true);
+        setMailError(null);
+      }
+
+      const res = await fetch("/api/mail-inbox/contacts", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await readJsonSafeResponse(res);
+      if (!res.ok || !data.success) {
+        throw new Error(asText(data.error) || "Failed to load email contacts");
+      }
+
+      const next = (Array.isArray(data.contacts) ? data.contacts : []) as MailPreviewContact[];
+      setMailContacts(next);
+      setMailSelectedEmail((prev) => {
+        if (!next.length) return "";
+        if (prev && next.some((item) => item.email === prev)) return prev;
+        return next[0].email;
+      });
+    } catch (error) {
+      if (!silent) {
+        setMailError(error instanceof Error ? error.message : "Failed to load email contacts");
+      }
+    } finally {
+      if (!silent) {
+        setMailLoadingContacts(false);
+      }
+    }
+  }, []);
+
+  const loadMailMessages = useCallback(async (email: string, opts?: { silent?: boolean }) => {
+    if (!email) return;
+    const silent = Boolean(opts?.silent);
+    try {
+      if (!silent) {
+        setMailLoadingMessages(true);
+        setMailError(null);
+      }
+
+      const endpoint = `/api/mail-inbox/messages?email=${encodeURIComponent(email)}`;
+      const res = await fetch(endpoint, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data = await readJsonSafeResponse(res);
+      if (!res.ok || !data.success) {
+        throw new Error(asText(data.error) || "Failed to load email messages");
+      }
+
+      const next = (Array.isArray(data.messages) ? data.messages : []) as MailPreviewMessage[];
+      setMailMessages(next);
+    } catch (error) {
+      if (!silent) {
+        setMailError(error instanceof Error ? error.message : "Failed to load email messages");
+      }
+    } finally {
+      if (!silent) {
+        setMailLoadingMessages(false);
+      }
+    }
+  }, []);
+
+  const sendMailReply = useCallback(async () => {
+    const to = mailSelectedEmail;
+    const body = mailBody.trim();
+    if (!to || !body) return;
+
+    try {
+      setMailSending(true);
+      setMailError(null);
+
+      const fallbackSubject =
+        mailMessages[mailMessages.length - 1]?.subject || "Conversation";
+      const subject = mailSubject.trim() || `Re: ${fallbackSubject}`;
+
+      const res = await fetch("/api/mail-inbox/send", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to,
+          subject,
+          body,
+        }),
+      });
+      const data = await readJsonSafeResponse(res);
+      if (!res.ok || !data.success) {
+        throw new Error(asText(data.error) || "Failed to send email");
+      }
+
+      setMailBody("");
+      setMailSubject("");
+      await Promise.all([
+        loadMailMessages(to),
+        loadMailContacts({ silent: true }),
+      ]);
+    } catch (error) {
+      setMailError(error instanceof Error ? error.message : "Failed to send email");
+    } finally {
+      setMailSending(false);
+    }
+  }, [mailSelectedEmail, mailBody, mailSubject, mailMessages, loadMailMessages, loadMailContacts]);
+
+  useEffect(() => {
+    void loadWaConversations();
+  }, [loadWaConversations]);
+
+  useEffect(() => {
+    if (!waSelectedConversationId) {
+      setWaMessages([]);
+      return;
+    }
+    void loadWaMessages(waSelectedConversationId);
+  }, [waSelectedConversationId, loadWaMessages]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadWaConversations({ silent: true });
+    }, 10000);
+    return () => window.clearInterval(timer);
+  }, [loadWaConversations]);
+
+  useEffect(() => {
+    if (!waSelectedConversationId) return;
+    const timer = window.setInterval(() => {
+      void loadWaMessages(waSelectedConversationId, { silent: true });
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [waSelectedConversationId, loadWaMessages]);
+
+  useEffect(() => {
+    void loadMailContacts();
+  }, [loadMailContacts]);
+
+  useEffect(() => {
+    if (!mailSelectedEmail) {
+      setMailMessages([]);
+      return;
+    }
+    void loadMailMessages(mailSelectedEmail);
+  }, [mailSelectedEmail, loadMailMessages]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadMailContacts({ silent: true });
+    }, 20000);
+    return () => window.clearInterval(timer);
+  }, [loadMailContacts]);
+
+  useEffect(() => {
+    if (!mailSelectedEmail) return;
+    const timer = window.setInterval(() => {
+      void loadMailMessages(mailSelectedEmail, { silent: true });
+    }, 12000);
+    return () => window.clearInterval(timer);
+  }, [mailSelectedEmail, loadMailMessages]);
 
   if (loading && !stats) {
     return (
@@ -659,6 +1022,356 @@ export default function DashboardPage() {
         </article>
       </section>
 
+      <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+        <article className="overflow-hidden rounded-3xl border border-[#c9d6cc] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#d7ddd8] bg-[#f7f9f8] px-4 py-4">
+            <h3 className="text-2xl font-semibold tracking-tight text-[#111b21]">Conversations</h3>
+            <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-[#e7f2ec] px-2 text-sm font-semibold text-[#1f6f54]">
+              {waFilteredConversations.length}
+            </span>
+          </div>
+
+          <div className="border-b border-[#d7ddd8] bg-[#f7f9f8] px-4 py-3">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7c74]" />
+              <input
+                type="text"
+                value={waQuery}
+                onChange={(event) => setWaQuery(event.target.value)}
+                placeholder="Search chats"
+                aria-label="Search chats"
+                className="w-full rounded-xl border border-[#bfd0c4] bg-white py-2.5 pl-9 pr-3 text-sm text-[#3a4a42] outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#00a884]/20"
+              />
+            </label>
+          </div>
+
+          <div className="min-h-[420px] max-h-[520px] space-y-2 overflow-y-auto bg-[#f5f7f6] px-3 py-3">
+            {waLoadingConversations ? (
+              <p className="rounded-2xl border border-[#d7ddd8] bg-white px-4 py-3 text-sm text-[#5c6b64]">
+                Loading conversations...
+              </p>
+            ) : waFilteredConversations.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-[#bfd0c4] bg-white px-4 py-3 text-lg text-[#5c6b64]">
+                No conversations found.
+              </p>
+            ) : (
+              waFilteredConversations.map((item) => {
+                const selected = item.id === waSelectedConversationId;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setWaSelectedConversationId(item.id)}
+                    className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${
+                      selected
+                        ? "border-[#9fd9c5] bg-[#e7f6ef]"
+                        : "border-[#d7ddd8] bg-white hover:border-[#bfd0c4] hover:bg-[#f6fbf8]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-[#111b21]">
+                        {item.contact.name || item.contact.phone}
+                      </p>
+                      <span className="shrink-0 text-[11px] text-[#667781]">
+                        {formatChatTime(item.lastMessageAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-[#54656f]">{waConversationPreview(item)}</p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </article>
+
+        <article className="relative overflow-hidden rounded-3xl border border-[#c9d6cc] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#054c44] bg-[#075e54] px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-white">WhatsApp Preview</p>
+              <p className="text-xs text-emerald-100">Chat and reply directly from dashboard</p>
+            </div>
+            <Link
+              href="/dashboard/whatsapp/inbox"
+              className="inline-flex items-center gap-1 rounded-lg border border-[#0f8f79] bg-[#0b7f6d] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0f8f79]"
+            >
+              Open full inbox
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {waError ? (
+            <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+              {waError}
+            </div>
+          ) : null}
+
+          {!waSelectedConversation ? (
+            <div className="flex min-h-[495px] items-center justify-center px-5 text-center">
+              <p className="text-3xl text-slate-500">Select chat to view contact details.</p>
+            </div>
+          ) : (
+            <div className="flex min-h-[495px] flex-col">
+              <div className="border-b border-[#d3dbd5] bg-[#f0f2f5] px-4 py-3">
+                <p className="truncate text-sm font-semibold text-[#111b21]">
+                  {waSelectedConversation.contact.name || waSelectedConversation.contact.phone}
+                </p>
+                <p className="truncate text-xs text-[#667781]">{waSelectedConversation.contact.phone}</p>
+              </div>
+
+              <div
+                className="h-[300px] flex-1 space-y-2 overflow-y-auto px-3 py-3"
+                style={{
+                  backgroundColor: "#efeae2",
+                  backgroundImage:
+                    "radial-gradient(rgba(17,27,33,0.04) 1px, transparent 1px), radial-gradient(rgba(17,27,33,0.02) 1px, transparent 1px)",
+                  backgroundPosition: "0 0, 12px 12px",
+                  backgroundSize: "24px 24px, 36px 36px",
+                }}
+              >
+                {waLoadingMessages ? (
+                  <p className="text-sm text-[#54656f]">Loading messages...</p>
+                ) : waMessages.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-[#bfd0c4] bg-white/90 px-3 py-2 text-sm text-[#54656f]">
+                    No messages in this conversation.
+                  </p>
+                ) : (
+                  waMessages.map((message) => {
+                    const outbound = message.direction === "outbound";
+                    return (
+                      <div key={message.id} className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                            outbound
+                              ? "bg-[#d9fdd3] text-[#111b21]"
+                              : "border border-[#e4e7e9] bg-white text-[#111b21]"
+                          }`}
+                        >
+                          <p className="whitespace-pre-wrap break-words">{message.text || "-"}</p>
+                          <p className="mt-1 text-[11px] text-[#667781]">{formatChatTime(message.createdAt)}</p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="border-t border-[#d3dbd5] bg-[#f0f2f5] px-3 py-3">
+                <div className="mb-2 rounded-xl border border-[#d3dbd5] bg-white px-3 py-2 text-xs text-[#54656f]">
+                  <p>Contact: {waSelectedConversation.contact.name || "-"}</p>
+                  <p>Phone: {waSelectedConversation.contact.phone}</p>
+                  <p>Opt-in: {waSelectedConversation.contact.optedIn ? "Yes" : "No"}</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    value={waText}
+                    onChange={(event) => setWaText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendWaMessage();
+                      }
+                    }}
+                    placeholder="Type WhatsApp reply..."
+                    className="h-10 flex-1 rounded-xl border border-[#d3dbd5] bg-white px-3 text-sm text-[#111b21] placeholder:text-[#8696a0] outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#00a884]/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void sendWaMessage()}
+                    disabled={waSending || !waText.trim()}
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#00a884] px-4 text-sm font-semibold text-white transition hover:bg-[#019173] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {waSending ? "..." : "Send"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </article>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+        <article className="overflow-hidden rounded-3xl border border-[#ccd7e6] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#d6dfec] bg-[#f3f6fb] px-4 py-4">
+            <h3 className="text-2xl font-semibold tracking-tight text-[#0f2d4a]">Email Conversations</h3>
+            <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-[#e6edf8] px-2 text-sm font-semibold text-[#1d4f80]">
+              {mailFilteredContacts.length}
+            </span>
+          </div>
+
+          <div className="border-b border-[#d6dfec] bg-[#f3f6fb] px-4 py-3">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7f99]" />
+              <input
+                type="text"
+                value={mailQuery}
+                onChange={(event) => setMailQuery(event.target.value)}
+                placeholder="Search emails"
+                aria-label="Search emails"
+                className="w-full rounded-xl border border-[#bfd0e6] bg-white py-2.5 pl-9 pr-3 text-sm text-[#35516d] outline-none transition focus:border-[#0d3b66] focus:ring-2 focus:ring-[#0d3b66]/20"
+              />
+            </label>
+          </div>
+
+          <div className="min-h-[420px] max-h-[520px] space-y-2 overflow-y-auto bg-[#f8fbff] px-3 py-3">
+            {mailLoadingContacts ? (
+              <p className="rounded-2xl border border-[#d6dfec] bg-white px-4 py-3 text-sm text-[#5b7088]">
+                Loading email conversations...
+              </p>
+            ) : mailFilteredContacts.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-[#bfd0e6] bg-white px-4 py-3 text-lg text-[#5b7088]">
+                No email conversations found.
+              </p>
+            ) : (
+              mailFilteredContacts.map((contact) => {
+                const selected = contact.email === mailSelectedEmail;
+                return (
+                  <button
+                    key={contact.email}
+                    type="button"
+                    onClick={() => setMailSelectedEmail(contact.email)}
+                    className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${
+                      selected
+                        ? "border-[#8fb2d9] bg-[#e9f1fb]"
+                        : "border-[#d6dfec] bg-white hover:border-[#bfd0e6] hover:bg-[#f5f9ff]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-[#0f2d4a]">{contact.email}</p>
+                      <span className="shrink-0 text-[11px] text-[#6b7f99]">
+                        {formatChatTime(contact.lastAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-xs text-[#5b7088]">
+                      {contact.lastMessage || "No subject"}
+                    </p>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </article>
+
+        <article className="relative overflow-hidden rounded-3xl border border-[#ccd7e6] bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-[#0a2f4f] bg-[#0d3b66] px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Email Preview</p>
+              <p className="text-xs text-blue-100">Read and reply from dashboard</p>
+            </div>
+            <Link
+              href="/dashboard/mail-inbox"
+              className="inline-flex items-center gap-1 rounded-lg border border-[#2f5d8a] bg-[#1a4a78] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#235381]"
+            >
+              Open full inbox
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {mailError ? (
+            <div className="border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">
+              {mailError}
+            </div>
+          ) : null}
+
+          {!mailSelectedEmail ? (
+            <div className="flex min-h-[495px] items-center justify-center px-5 text-center">
+              <p className="text-3xl text-[#5b7088]">Select email to preview thread.</p>
+            </div>
+          ) : (
+            <div className="flex min-h-[495px] flex-col">
+              <div className="border-b border-[#d6dfec] bg-[#eef3f9] px-4 py-3">
+                <p className="truncate text-sm font-semibold text-[#0f2d4a]">{mailSelectedEmail}</p>
+                <p className="truncate text-xs text-[#5b7088]">
+                  Thread messages: {mailMessages.length}
+                </p>
+              </div>
+
+              <div
+                className="h-[300px] flex-1 space-y-2 overflow-y-auto px-3 py-3"
+                style={{
+                  backgroundColor: "#f4f7fb",
+                  backgroundImage:
+                    "linear-gradient(to bottom, rgba(13,59,102,0.035) 1px, transparent 1px)",
+                  backgroundSize: "100% 28px",
+                }}
+              >
+                {mailLoadingMessages ? (
+                  <p className="text-sm text-[#5b7088]">Loading messages...</p>
+                ) : mailMessages.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-[#bfd0e6] bg-white px-3 py-2 text-sm text-[#5b7088]">
+                    No messages in this thread.
+                  </p>
+                ) : (
+                  mailMessages.map((message) => {
+                    const outbound = message.direction === "out";
+                    return (
+                      <div key={message.id} className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm shadow-sm ${
+                            outbound
+                              ? "bg-[#0d3b66] text-white"
+                              : "border border-[#d6dfec] bg-white text-[#0f2d4a]"
+                          }`}
+                        >
+                          {message.subject ? (
+                            <p
+                              className={`mb-1 truncate text-xs font-semibold ${
+                                outbound ? "text-blue-100" : "text-[#4b6886]"
+                              }`}
+                            >
+                              {message.subject}
+                            </p>
+                          ) : null}
+                          <p className="whitespace-pre-wrap break-words">{message.body || "-"}</p>
+                          <p
+                            className={`mt-1 text-[11px] ${
+                              outbound ? "text-blue-100" : "text-[#6b7f99]"
+                            }`}
+                          >
+                            {formatChatTime(message.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="border-t border-[#d6dfec] bg-[#eef3f9] px-3 py-3">
+                <input
+                  value={mailSubject}
+                  onChange={(event) => setMailSubject(event.target.value)}
+                  placeholder="Subject (optional)"
+                  className="mb-2 h-9 w-full rounded-xl border border-[#bfd0e6] bg-white px-3 text-xs text-[#35516d] placeholder:text-[#7f93ad] outline-none transition focus:border-[#0d3b66] focus:ring-2 focus:ring-[#0d3b66]/20"
+                />
+                <div className="flex items-center gap-2">
+                  <input
+                    value={mailBody}
+                    onChange={(event) => setMailBody(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendMailReply();
+                      }
+                    }}
+                    placeholder="Type email reply..."
+                    className="h-10 flex-1 rounded-xl border border-[#bfd0e6] bg-white px-3 text-sm text-[#0f2d4a] placeholder:text-[#7f93ad] outline-none transition focus:border-[#0d3b66] focus:ring-2 focus:ring-[#0d3b66]/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void sendMailReply()}
+                    disabled={mailSending || !mailSelectedEmail || !mailBody.trim()}
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#0d3b66] px-4 text-sm font-semibold text-white transition hover:bg-[#0a2f4f] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {mailSending ? "..." : "Send"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </article>
+      </section>
+
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -678,6 +1391,27 @@ export default function DashboardPage() {
       </section>
     </div>
   );
+}
+
+function formatChatTime(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+  const isSameDay =
+    date.getDate() === now.getDate() &&
+    date.getMonth() === now.getMonth() &&
+    date.getFullYear() === now.getFullYear();
+
+  return isSameDay
+    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function waConversationPreview(conversation: WaConversation) {
+  const text = conversation.messages[0]?.text || "No messages yet";
+  return text.length > 60 ? `${text.slice(0, 60)}...` : text;
 }
 
 function HealthRow({
@@ -742,6 +1476,20 @@ function QuickLinkCard({
       <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>
     </Link>
   );
+}
+
+async function readJsonSafeResponse(res: Response) {
+  const text = await res.text();
+  if (!text) return {} as Record<string, unknown>;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {} as Record<string, unknown>;
+  }
+}
+
+function asText(value: unknown) {
+  return String(value ?? "").trim();
 }
 
 async function fetchJSON<T>(url: string) {

@@ -183,29 +183,83 @@ export async function POST(req: Request) {
       readOptional(candidate.businessName) ||
       "WhatsApp Account";
 
-    const existingByPhone = await prisma.waAccount.findFirst({
-      where: {
-        tenantId: auth.tenantId,
-        phoneNumber,
-      },
-      select: {
-        id: true,
-        accessToken: true,
-        webhookVerifyToken: true,
-      },
-    });
+    const [existingByPhone, existingByPhoneId, crossTenantByPhone, crossTenantByPhoneId] =
+      await Promise.all([
+        prisma.waAccount.findFirst({
+          where: {
+            tenantId: auth.tenantId,
+            phoneNumber,
+          },
+          select: {
+            id: true,
+            accessToken: true,
+            webhookVerifyToken: true,
+          },
+        }),
+        prisma.waAccount.findFirst({
+          where: {
+            tenantId: auth.tenantId,
+            phoneNumberId,
+          },
+          select: {
+            id: true,
+            accessToken: true,
+            webhookVerifyToken: true,
+          },
+        }),
+        prisma.waAccount.findFirst({
+          where: {
+            phoneNumber,
+            NOT: { tenantId: auth.tenantId },
+          },
+          select: {
+            id: true,
+            tenantId: true,
+          },
+        }),
+        prisma.waAccount.findFirst({
+          where: {
+            phoneNumberId,
+            NOT: { tenantId: auth.tenantId },
+          },
+          select: {
+            id: true,
+            tenantId: true,
+          },
+        }),
+      ]);
 
-    const existingByPhoneId = await prisma.waAccount.findFirst({
-      where: {
-        tenantId: auth.tenantId,
-        phoneNumberId,
-      },
-      select: {
-        id: true,
-        accessToken: true,
-        webhookVerifyToken: true,
-      },
-    });
+    if (crossTenantByPhone) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Phone number is already connected in another workspace. Disconnect it there first.",
+          conflict: {
+            type: "phoneNumber",
+            accountId: crossTenantByPhone.id,
+            tenantId: crossTenantByPhone.tenantId,
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    if (crossTenantByPhoneId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Phone number ID is already connected in another workspace. Disconnect it there first.",
+          conflict: {
+            type: "phoneNumberId",
+            accountId: crossTenantByPhoneId.id,
+            tenantId: crossTenantByPhoneId.tenantId,
+          },
+        },
+        { status: 409 }
+      );
+    }
 
     if (existingByPhone && existingByPhoneId && existingByPhone.id !== existingByPhoneId.id) {
       return NextResponse.json(

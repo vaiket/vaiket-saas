@@ -29,9 +29,8 @@ function getOAuthScopes() {
       .join(",");
   }
 
-  // Keep default to a single fetch-oriented scope to reduce connect failures
-  // on apps that do not yet have full messaging permission grants.
-  return "whatsapp_business_management";
+  // Production default: management + send permissions.
+  return "whatsapp_business_management,whatsapp_business_messaging";
 }
 
 function getAppBaseUrl(req: Request) {

@@ -65,7 +65,6 @@ const menu = [
   { name: "IMAP Settings", path: "/dashboard/imap-management" },
   { name: "Onboarding", path: "/dashboard/onboarding-details" },
   { name: "Users Management", path: "/dashboard/users-management" },
-  { name: "Leads", path: "/dashboard/leads" },
   { name: "Inbox", path: "/dashboard/inbox" },
   { name: "Traffic Analytics", path: "/dashboard/traffic" },
   { name: "Billing", path: "/dashboard/billing" },

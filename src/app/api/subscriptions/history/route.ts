@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth/session";
+import { getCatalogPlan } from "@/lib/subscriptions/catalog";
 import { getPlanProduct, isProductKey } from "@/lib/subscriptions/products";
 
 export async function GET(req: Request) {
@@ -34,10 +35,32 @@ export async function GET(req: Request) {
       orderBy: { createdAt: "desc" },
     });
 
+    const planKeys = Array.from(new Set(history.map((item) => item.planKey)));
+    const dbPlans = planKeys.length
+      ? await prisma.subscriptionPlan.findMany({
+          where: { key: { in: planKeys } },
+          select: { key: true, priceMonth: true, priceYear: true },
+        })
+      : [];
+    const dbPlanMap = new Map(dbPlans.map((plan) => [plan.key, plan]));
+
     return NextResponse.json(
       {
         history: history.map((item) => ({
           ...item,
+          amountPaid:
+            item.amountPaid ??
+            (() => {
+              const dbPlan = dbPlanMap.get(item.planKey);
+              const fallbackPlan = dbPlan ? null : getCatalogPlan(item.planKey);
+              const monthAmount = dbPlan?.priceMonth ?? fallbackPlan?.priceMonth ?? null;
+              const yearAmount = dbPlan?.priceYear ?? fallbackPlan?.priceYear ?? null;
+
+              if (item.billingCycle === "yearly") {
+                return yearAmount ?? monthAmount ?? null;
+              }
+              return monthAmount ?? null;
+            })(),
           product: getPlanProduct(item.planKey),
         })),
         product: product ?? "all",

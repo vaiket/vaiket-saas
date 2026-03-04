@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  Eye,
   BadgeCheck,
   CalendarClock,
   CheckCircle2,
@@ -164,6 +165,29 @@ function statusTone(status: string) {
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
+function invoiceMeta(status: string) {
+  const value = String(status || "").toLowerCase();
+  if (["active", "paid", "captured", "success", "charged"].includes(value)) {
+    return {
+      label: "Paid Invoice",
+      className:
+        "inline-flex flex-col items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100",
+    };
+  }
+  if (["failed", "cancelled", "halted", "expired"].includes(value)) {
+    return {
+      label: "Failed Invoice",
+      className:
+        "inline-flex flex-col items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700 transition hover:border-rose-300 hover:bg-rose-100",
+    };
+  }
+  return {
+    label: "Invoice",
+    className:
+      "inline-flex flex-col items-center justify-center rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-600 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700",
+  };
+}
+
 export default function SubscriptionWorkspace({
   fixedProduct,
   title = "Prime Value Bundles",
@@ -266,7 +290,15 @@ export default function SubscriptionWorkspace({
         return;
       }
 
-      if (!data.orderId || !data.keyId || !data.amountInPaise || !data.subId) {
+      const isTrialAutopayCheckout =
+        data.checkoutMode === "trial_autopay" &&
+        Boolean(data.autopaySubscriptionId);
+
+      if (
+        !data.keyId ||
+        !data.subId ||
+        (!isTrialAutopayCheckout && (!data.orderId || !data.amountInPaise))
+      ) {
         toast.error("Invalid checkout order response");
         await markFailed({
           subId: data.subId,
@@ -277,36 +309,12 @@ export default function SubscriptionWorkspace({
         return;
       }
 
-      const isTrialAutopayCheckout =
-        data.checkoutMode === "trial_autopay" &&
-        Boolean(data.autopaySubscriptionId);
-
-      const setupAutopayMandate = async () => {
-        if (
-          !isTrialAutopayCheckout ||
-          !data.keyId ||
-          !data.subId ||
-          !data.autopaySubscriptionId ||
-          !window.Razorpay
-        ) {
-          return true;
-        }
-
-        const recurringInr = data.recurringAmountInr ?? DEFAULT_RECURRING_INR;
-
-        return new Promise<boolean>((resolve) => {
-          let settled = false;
-          const done = (value: boolean) => {
-            if (settled) return;
-            settled = true;
-            resolve(value);
-          };
-
-          const options: Record<string, unknown> = {
+      const options: Record<string, unknown> = isTrialAutopayCheckout
+        ? {
             key: data.keyId,
             subscription_id: data.autopaySubscriptionId,
             name: "Vaiket Bridge",
-            description: `Autopay setup - INR ${recurringInr}/month`,
+            description: "7-day trial (INR 2 refundable)",
             prefill: {
               name: data.customer?.name || "",
               email: data.customer?.email || "",
@@ -314,9 +322,13 @@ export default function SubscriptionWorkspace({
             },
             theme: { color: "#10b981" },
             modal: {
-              ondismiss: () => {
-                toast.error("Autopay setup was closed.");
-                done(false);
+              ondismiss: async () => {
+                toast("Checkout closed");
+                await markFailed({
+                  subId: data.subId,
+                  reason: "checkout_closed_by_user",
+                });
+                setLoading(null);
               },
             },
             handler: async (paymentResponse: RazorpayCheckoutResponse) => {
@@ -327,116 +339,97 @@ export default function SubscriptionWorkspace({
                   body: JSON.stringify({
                     subId: data.subId,
                     razorpay_subscription_id:
-                      paymentResponse.razorpay_subscription_id ||
-                      data.autopaySubscriptionId,
+                      paymentResponse.razorpay_subscription_id || data.autopaySubscriptionId,
                     razorpay_payment_id: paymentResponse.razorpay_payment_id,
                     razorpay_signature: paymentResponse.razorpay_signature,
                   }),
                 });
                 const verifyJson = await verifyRes.json();
                 if (!verifyJson?.success) {
-                  toast.error(verifyJson?.error || "Autopay mandate verification failed");
-                  done(false);
+                  toast.error(verifyJson?.error || "Payment verification failed");
+                  await markFailed({
+                    subId: data.subId,
+                    reason: verifyJson?.error || "verification_failed",
+                  });
                   return;
                 }
 
-                done(true);
+                const recurringInr = data.recurringAmountInr ?? DEFAULT_RECURRING_INR;
+                const trialDays = data.trialDays ?? DEFAULT_TRIAL_DAYS;
+                if (verifyJson?.trialRefunded) {
+                  toast.success(
+                    `Trial active. INR 2 refunded. INR ${recurringInr}/month starts after ${trialDays} days.`
+                  );
+                } else {
+                  toast.success(
+                    `Trial active. Refund will be processed. INR ${recurringInr}/month starts after ${trialDays} days.`
+                  );
+                }
+
+                await loadData(product);
               } catch {
-                toast.error("Autopay verification request failed");
-                done(false);
+                toast.error("Verification request failed");
+              } finally {
+                setLoading(null);
+              }
+            },
+          }
+        : {
+            key: data.keyId,
+            amount: data.amountInPaise,
+            currency: data.currency || "INR",
+            name: "Vaiket Bridge",
+            description: data.planTitle || "Subscription",
+            order_id: data.orderId,
+            prefill: {
+              name: data.customer?.name || "",
+              email: data.customer?.email || "",
+              contact: data.customer?.contact || "",
+            },
+            theme: { color: product === "whatsapp" ? "#10b981" : "#4f46e5" },
+            modal: {
+              ondismiss: async () => {
+                toast("Checkout closed");
+                await markFailed({
+                  subId: data.subId,
+                  orderId: data.orderId,
+                  reason: "checkout_closed_by_user",
+                });
+                setLoading(null);
+              },
+            },
+            handler: async (paymentResponse: RazorpayCheckoutResponse) => {
+              try {
+                const verifyRes = await fetch("/api/payments/razorpay/verify", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    subId: data.subId,
+                    razorpay_order_id: paymentResponse.razorpay_order_id || data.orderId,
+                    razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                    razorpay_signature: paymentResponse.razorpay_signature,
+                  }),
+                });
+                const verifyJson = await verifyRes.json();
+                if (!verifyJson?.success) {
+                  toast.error(verifyJson?.error || "Payment verification failed");
+                  await markFailed({
+                    subId: data.subId,
+                    orderId: data.orderId,
+                    reason: verifyJson?.error || "verification_failed",
+                  });
+                  return;
+                }
+
+                toast.success("Plan activated successfully.");
+                await loadData(product);
+              } catch {
+                toast.error("Verification request failed");
+              } finally {
+                setLoading(null);
               }
             },
           };
-
-          const razorpay = new window.Razorpay(options);
-          razorpay.on("payment.failed", (payload: unknown) => {
-            const p = (payload || {}) as {
-              error?: { code?: string; description?: string };
-            };
-            toast.error(p.error?.description || "Autopay mandate failed");
-            done(false);
-          });
-          razorpay.open();
-        });
-      };
-
-      const options: Record<string, unknown> = {
-        key: data.keyId,
-        amount: data.amountInPaise,
-        currency: data.currency || "INR",
-        name: "Vaiket Bridge",
-        description: isTrialAutopayCheckout
-          ? `7-day trial (INR ${data.amountInPaise / 100} refundable)`
-          : data.planTitle || "Subscription",
-        order_id: data.orderId,
-        prefill: {
-          name: data.customer?.name || "",
-          email: data.customer?.email || "",
-          contact: data.customer?.contact || "",
-        },
-        theme: { color: product === "whatsapp" ? "#10b981" : "#4f46e5" },
-        modal: {
-          ondismiss: async () => {
-            toast("Checkout closed");
-            await markFailed({
-              subId: data.subId,
-              orderId: data.orderId,
-              reason: "checkout_closed_by_user",
-            });
-            setLoading(null);
-          },
-        },
-        handler: async (paymentResponse: RazorpayCheckoutResponse) => {
-          try {
-            const verifyRes = await fetch("/api/payments/razorpay/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                subId: data.subId,
-                razorpay_order_id: paymentResponse.razorpay_order_id || data.orderId,
-                razorpay_payment_id: paymentResponse.razorpay_payment_id,
-                razorpay_signature: paymentResponse.razorpay_signature,
-                razorpay_subscription_id: data.autopaySubscriptionId,
-              }),
-            });
-            const verifyJson = await verifyRes.json();
-            if (!verifyJson?.success) {
-              toast.error(verifyJson?.error || "Payment verification failed");
-              await markFailed({
-                subId: data.subId,
-                orderId: data.orderId,
-                reason: verifyJson?.error || "verification_failed",
-              });
-              return;
-            }
-
-            if (isTrialAutopayCheckout) {
-              toast.success("Trial activated. INR 2 will be refunded.");
-              const mandateDone = await setupAutopayMandate();
-              const recurringInr = data.recurringAmountInr ?? DEFAULT_RECURRING_INR;
-              const trialDays = data.trialDays ?? DEFAULT_TRIAL_DAYS;
-
-              if (mandateDone) {
-                toast.success(
-                  `Autopay active. INR ${recurringInr}/month will start after ${trialDays} days.`
-                );
-              } else {
-                toast(
-                  `Trial active for ${trialDays} days. Please complete mandate setup before trial ends.`
-                );
-              }
-            } else {
-              toast.success("Plan activated successfully.");
-            }
-
-            await loadData(product);
-          } catch {
-            toast.error("Verification request failed");
-          } finally {
-            setLoading(null);
-          }
-        },
-      };
 
       const razorpay = new window.Razorpay(options);
       razorpay.on("payment.failed", async (payload: unknown) => {
@@ -469,6 +462,10 @@ export default function SubscriptionWorkspace({
   );
 
   const recentHistory = useMemo(() => history.slice(0, 15), [history]);
+  const openInvoice = (subId: number) => {
+    if (typeof window === "undefined") return;
+    window.open(`/api/billing/invoice/${subId}`, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="mx-auto w-full max-w-[1700px] space-y-6">
@@ -655,7 +652,7 @@ export default function SubscriptionWorkspace({
           </p>
 
           <div className="mt-4 overflow-x-auto">
-            <table className="min-w-[760px] w-full text-left text-sm">
+            <table className="min-w-[860px] w-full text-left text-sm">
               <thead>
                 <tr className="border-b text-[11px] uppercase tracking-wide text-slate-500">
                   <th className="px-2 py-2">Plan</th>
@@ -664,34 +661,51 @@ export default function SubscriptionWorkspace({
                   <th className="px-2 py-2">Amount</th>
                   <th className="px-2 py-2">Created</th>
                   <th className="px-2 py-2">Ends</th>
+                  <th className="px-2 py-2 text-center">Invoice</th>
                 </tr>
               </thead>
               <tbody>
                 {recentHistory.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-2 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-2 py-6 text-center text-sm text-slate-500">
                       No transactions yet.
                     </td>
                   </tr>
                 ) : (
-                  recentHistory.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-100">
-                      <td className="px-2 py-2 font-medium text-slate-700">{row.planKey}</td>
-                      <td className="px-2 py-2 capitalize text-slate-600">{row.billingCycle}</td>
-                      <td className="px-2 py-2">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${statusTone(
-                            row.status
-                          )}`}
-                        >
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-slate-700">INR {row.amountPaid ?? "-"}</td>
-                      <td className="px-2 py-2 text-slate-600">{formatDate(row.createdAt)}</td>
-                      <td className="px-2 py-2 text-slate-600">{formatDate(row.endsAt)}</td>
-                    </tr>
-                  ))
+                  recentHistory.map((row) => {
+                    const meta = invoiceMeta(row.status);
+                    return (
+                      <tr key={row.id} className="border-b border-slate-100">
+                        <td className="px-2 py-2 font-medium text-slate-700">{row.planKey}</td>
+                        <td className="px-2 py-2 capitalize text-slate-600">{row.billingCycle}</td>
+                        <td className="px-2 py-2">
+                          <span
+                            className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${statusTone(
+                              row.status
+                            )}`}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-slate-700">INR {row.amountPaid ?? "-"}</td>
+                        <td className="px-2 py-2 text-slate-600">{formatDate(row.createdAt)}</td>
+                        <td className="px-2 py-2 text-slate-600">{formatDate(row.endsAt)}</td>
+                        <td className="px-2 py-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => openInvoice(row.id)}
+                            className={meta.className}
+                            title={`View ${meta.label.toLowerCase()} for #${row.id}`}
+                          >
+                            <span className="text-[9px] font-semibold uppercase leading-tight tracking-wide">
+                              {meta.label}
+                            </span>
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
