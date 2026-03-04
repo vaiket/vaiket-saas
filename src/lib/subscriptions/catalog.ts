@@ -37,7 +37,7 @@ export const SUBSCRIPTION_CATALOG: SubscriptionCatalogPlan[] = [
   {
     key: "whatsapp_starter",
     title: "WhatsApp Starter",
-    priceMonth: 1499,
+    priceMonth: 1,
     priceYear: 14999,
     features: ["1 WhatsApp number", "Inbox + contacts", "Basic template sending"],
     product: "whatsapp",

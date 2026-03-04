@@ -11,14 +11,23 @@ type RazorpayWebhookEvent = {
       entity?: {
         id?: string;
         order_id?: string;
+        subscription_id?: string;
         amount?: number;
         currency?: string;
         error_code?: string;
         error_description?: string;
       };
     };
+    subscription?: {
+      entity?: {
+        id?: string;
+        status?: string;
+      };
+    };
   };
 };
+
+const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
 
 function resolveEndsAt(startedAt: Date, billingCycle: string) {
   const endsAt = new Date(startedAt);
@@ -36,6 +45,70 @@ function verifyWebhookSignature(rawBody: string, signature: string | null) {
   if (!signature) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   return expected === signature;
+}
+
+function isRecurringSuccessEvent(event: string) {
+  return (
+    event === "payment.captured" ||
+    event === "order.paid" ||
+    event === "subscription.charged" ||
+    event === "invoice.paid"
+  );
+}
+
+function isFailureEvent(event: string) {
+  return (
+    event === "payment.failed" ||
+    event === "subscription.halted" ||
+    event === "subscription.paused" ||
+    event === "subscription.cancelled"
+  );
+}
+
+async function findSubscription(params: { orderId: string; externalSubscriptionId: string }) {
+  const { orderId, externalSubscriptionId } = params;
+
+  if (externalSubscriptionId) {
+    const byExternalSub = await prisma.userSubscription.findFirst({
+      where: { paymentRef: externalSubscriptionId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (byExternalSub) return byExternalSub;
+  }
+
+  if (orderId) {
+    const byOrder = await prisma.userSubscription.findFirst({
+      where: { paymentRef: orderId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (byOrder) return byOrder;
+  }
+
+  if (orderId) {
+    const initiatedLog = await prisma.paymentLog.findFirst({
+      where: {
+        provider: "razorpay",
+        providerRef: orderId,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        meta: true,
+      },
+    });
+
+    const meta = (initiatedLog?.meta || {}) as Record<string, unknown>;
+    const localSubscriptionId = Number(
+      meta.localSubscriptionId ?? meta.subscriptionId ?? 0
+    );
+    if (Number.isFinite(localSubscriptionId) && localSubscriptionId > 0) {
+      const byId = await prisma.userSubscription.findUnique({
+        where: { id: localSubscriptionId },
+      });
+      if (byId) return byId;
+    }
+  }
+
+  return null;
 }
 
 export async function POST(req: Request) {
@@ -61,49 +134,46 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: "Invalid payload" }, { status: 400 });
     }
 
+    const event = payload.event;
     const paymentEntity = payload.payload?.payment?.entity || {};
+    const subscriptionEntity = payload.payload?.subscription?.entity || {};
     const orderId = String(paymentEntity.order_id || "").trim();
     const paymentId = String(paymentEntity.id || "").trim();
+    const externalSubscriptionId = String(
+      paymentEntity.subscription_id || subscriptionEntity.id || ""
+    ).trim();
     const amountPaise = Number(paymentEntity.amount || 0);
     const amountInr = Number.isFinite(amountPaise) ? Math.round(amountPaise / 100) : 0;
     const currency = String(paymentEntity.currency || "INR").trim() || "INR";
 
-    if (!orderId) {
+    const sub = await findSubscription({ orderId, externalSubscriptionId });
+    if (!sub) {
       return NextResponse.json({ success: true, skipped: true });
     }
 
-    let sub = await prisma.userSubscription.findFirst({
-      where: { paymentRef: orderId },
-      orderBy: { createdAt: "desc" },
-    });
+    if (isRecurringSuccessEvent(event)) {
+      const now = new Date();
+      const isTrialAutopay =
+        sub.planKey === TRIAL_AUTOPAY_PLAN_KEY &&
+        sub.billingCycle === "monthly" &&
+        Boolean(externalSubscriptionId) &&
+        sub.paymentRef === externalSubscriptionId;
 
-    if (!sub) {
-      const initiatedLog = await prisma.paymentLog.findFirst({
-        where: {
-          provider: "razorpay",
-          providerRef: orderId,
-        },
-        orderBy: { createdAt: "desc" },
-        select: {
-          meta: true,
-        },
-      });
+      if (isTrialAutopay && amountInr > 0) {
+        const baseDate = sub.endsAt && sub.endsAt > now ? sub.endsAt : now;
+        const nextEndsAt = resolveEndsAt(baseDate, sub.billingCycle);
 
-      const meta = (initiatedLog?.meta || {}) as Record<string, unknown>;
-      const subscriptionId = Number(meta.subscriptionId ?? 0);
-      if (Number.isFinite(subscriptionId) && subscriptionId > 0) {
-        sub = await prisma.userSubscription.findUnique({
-          where: { id: subscriptionId },
+        await prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: {
+            status: "active",
+            endsAt: nextEndsAt,
+            amountPaid: amountInr,
+            paymentRef: externalSubscriptionId,
+            startedAt: sub.startedAt || now,
+          },
         });
-      }
-    }
-
-    if (!sub) {
-      return NextResponse.json({ success: true, skipped: true });
-    }
-
-    if (payload.event === "payment.captured" || payload.event === "order.paid") {
-      if (sub.status !== "active") {
+      } else if (sub.status !== "active") {
         const dbPlan = await prisma.subscriptionPlan.findUnique({ where: { key: sub.planKey } });
         const fallbackPlan = dbPlan ? null : getCatalogPlan(sub.planKey);
         const plan = dbPlan ?? fallbackPlan;
@@ -120,7 +190,7 @@ export async function POST(req: Request) {
             startedAt,
             endsAt,
             amountPaid: amountFromPlan ?? (amountInr > 0 ? amountInr : null),
-            paymentRef: paymentId || orderId,
+            paymentRef: paymentId || orderId || externalSubscriptionId || sub.paymentRef,
           },
         });
       }
@@ -130,20 +200,28 @@ export async function POST(req: Request) {
           tenantId: sub.tenantId,
           userId: sub.userId,
           provider: "razorpay",
-          providerRef: paymentId || orderId,
+          providerRef: paymentId || orderId || externalSubscriptionId || null,
           amount: amountInr > 0 ? amountInr : sub.amountPaid ?? 0,
           currency,
           status: "success",
-          meta: { orderId, event: payload.event, source: "webhook" },
+          meta: {
+            orderId,
+            event,
+            source: "webhook",
+            externalSubscriptionId: externalSubscriptionId || null,
+          },
         },
       });
-    } else if (payload.event === "payment.failed") {
-      if (sub.status !== "active") {
+    } else if (isFailureEvent(event)) {
+      if (event === "subscription.cancelled") {
         await prisma.userSubscription.update({
           where: { id: sub.id },
-          data: {
-            status: "failed",
-          },
+          data: { status: "cancelled" },
+        });
+      } else if (sub.status !== "active") {
+        await prisma.userSubscription.update({
+          where: { id: sub.id },
+          data: { status: "failed" },
         });
       }
 
@@ -152,16 +230,37 @@ export async function POST(req: Request) {
           tenantId: sub.tenantId,
           userId: sub.userId,
           provider: "razorpay",
-          providerRef: paymentId || orderId,
+          providerRef: paymentId || orderId || externalSubscriptionId || null,
           amount: amountInr > 0 ? amountInr : sub.amountPaid ?? 0,
           currency,
           status: "failed",
           meta: {
             orderId,
-            event: payload.event,
+            event,
             source: "webhook",
+            externalSubscriptionId: externalSubscriptionId || null,
+            subscriptionStatus: subscriptionEntity.status || null,
             errorCode: paymentEntity.error_code || null,
             errorDescription: paymentEntity.error_description || null,
+          },
+        },
+      });
+    } else {
+      await prisma.paymentLog.create({
+        data: {
+          tenantId: sub.tenantId,
+          userId: sub.userId,
+          provider: "razorpay",
+          providerRef: paymentId || orderId || externalSubscriptionId || null,
+          amount: amountInr > 0 ? amountInr : 0,
+          currency,
+          status: "initiated",
+          meta: {
+            orderId,
+            event,
+            source: "webhook",
+            externalSubscriptionId: externalSubscriptionId || null,
+            subscriptionStatus: subscriptionEntity.status || null,
           },
         },
       });

@@ -46,6 +46,11 @@ type RazorpayCreateOrderResponse = {
   amountInPaise?: number;
   currency?: string;
   planTitle?: string;
+  checkoutMode?: "one_time" | "trial_autopay";
+  autopaySubscriptionId?: string;
+  autopayStartAt?: string;
+  trialDays?: number;
+  recurringAmountInr?: number;
   customer?: {
     name?: string;
     email?: string;
@@ -55,7 +60,8 @@ type RazorpayCreateOrderResponse = {
 
 type RazorpayCheckoutResponse = {
   razorpay_payment_id: string;
-  razorpay_order_id: string;
+  razorpay_order_id?: string;
+  razorpay_subscription_id?: string;
   razorpay_signature: string;
 };
 
@@ -98,6 +104,9 @@ const PRODUCT_CONFIG: Record<
 };
 
 let razorpayScriptPromise: Promise<boolean> | null = null;
+const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
+const DEFAULT_TRIAL_DAYS = 7;
+const DEFAULT_RECURRING_INR = 999;
 
 function loadRazorpayScript(): Promise<boolean> {
   if (typeof window === "undefined") return Promise.resolve(false);
@@ -268,12 +277,97 @@ export default function SubscriptionWorkspace({
         return;
       }
 
+      const isTrialAutopayCheckout =
+        data.checkoutMode === "trial_autopay" &&
+        Boolean(data.autopaySubscriptionId);
+
+      const setupAutopayMandate = async () => {
+        if (
+          !isTrialAutopayCheckout ||
+          !data.keyId ||
+          !data.subId ||
+          !data.autopaySubscriptionId ||
+          !window.Razorpay
+        ) {
+          return true;
+        }
+
+        const recurringInr = data.recurringAmountInr ?? DEFAULT_RECURRING_INR;
+
+        return new Promise<boolean>((resolve) => {
+          let settled = false;
+          const done = (value: boolean) => {
+            if (settled) return;
+            settled = true;
+            resolve(value);
+          };
+
+          const options: Record<string, unknown> = {
+            key: data.keyId,
+            subscription_id: data.autopaySubscriptionId,
+            name: "Vaiket Bridge",
+            description: `Autopay setup - INR ${recurringInr}/month`,
+            prefill: {
+              name: data.customer?.name || "",
+              email: data.customer?.email || "",
+              contact: data.customer?.contact || "",
+            },
+            theme: { color: "#10b981" },
+            modal: {
+              ondismiss: () => {
+                toast.error("Autopay setup was closed.");
+                done(false);
+              },
+            },
+            handler: async (paymentResponse: RazorpayCheckoutResponse) => {
+              try {
+                const verifyRes = await fetch("/api/payments/razorpay/verify", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    subId: data.subId,
+                    razorpay_subscription_id:
+                      paymentResponse.razorpay_subscription_id ||
+                      data.autopaySubscriptionId,
+                    razorpay_payment_id: paymentResponse.razorpay_payment_id,
+                    razorpay_signature: paymentResponse.razorpay_signature,
+                  }),
+                });
+                const verifyJson = await verifyRes.json();
+                if (!verifyJson?.success) {
+                  toast.error(verifyJson?.error || "Autopay mandate verification failed");
+                  done(false);
+                  return;
+                }
+
+                done(true);
+              } catch {
+                toast.error("Autopay verification request failed");
+                done(false);
+              }
+            },
+          };
+
+          const razorpay = new window.Razorpay(options);
+          razorpay.on("payment.failed", (payload: unknown) => {
+            const p = (payload || {}) as {
+              error?: { code?: string; description?: string };
+            };
+            toast.error(p.error?.description || "Autopay mandate failed");
+            done(false);
+          });
+          razorpay.open();
+        });
+      };
+
       const options: Record<string, unknown> = {
         key: data.keyId,
         amount: data.amountInPaise,
         currency: data.currency || "INR",
         name: "Vaiket Bridge",
-        description: data.planTitle || "Subscription",
+        description: isTrialAutopayCheckout
+          ? `7-day trial (INR ${data.amountInPaise / 100} refundable)`
+          : data.planTitle || "Subscription",
         order_id: data.orderId,
         prefill: {
           name: data.customer?.name || "",
@@ -299,9 +393,10 @@ export default function SubscriptionWorkspace({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 subId: data.subId,
-                razorpay_order_id: paymentResponse.razorpay_order_id,
+                razorpay_order_id: paymentResponse.razorpay_order_id || data.orderId,
                 razorpay_payment_id: paymentResponse.razorpay_payment_id,
                 razorpay_signature: paymentResponse.razorpay_signature,
+                razorpay_subscription_id: data.autopaySubscriptionId,
               }),
             });
             const verifyJson = await verifyRes.json();
@@ -315,7 +410,25 @@ export default function SubscriptionWorkspace({
               return;
             }
 
-            toast.success("Plan activated successfully.");
+            if (isTrialAutopayCheckout) {
+              toast.success("Trial activated. INR 2 will be refunded.");
+              const mandateDone = await setupAutopayMandate();
+              const recurringInr = data.recurringAmountInr ?? DEFAULT_RECURRING_INR;
+              const trialDays = data.trialDays ?? DEFAULT_TRIAL_DAYS;
+
+              if (mandateDone) {
+                toast.success(
+                  `Autopay active. INR ${recurringInr}/month will start after ${trialDays} days.`
+                );
+              } else {
+                toast(
+                  `Trial active for ${trialDays} days. Please complete mandate setup before trial ends.`
+                );
+              }
+            } else {
+              toast.success("Plan activated successfully.");
+            }
+
             await loadData(product);
           } catch {
             toast.error("Verification request failed");
@@ -439,6 +552,20 @@ export default function SubscriptionWorkspace({
           const monthlyAmount = plan.priceMonth || 0;
           const yearlyAmount = plan.priceYear || 0;
           const showAmount = billingCycle === "yearly" && yearlyAmount ? yearlyAmount : monthlyAmount;
+          const isTrialAutopayCard =
+            product === "whatsapp" &&
+            plan.key === TRIAL_AUTOPAY_PLAN_KEY &&
+            billingCycle === "monthly";
+          const displayFeatures = isTrialAutopayCard
+            ? [
+                "7-day free trial access",
+                "INR 2 trial authorization (auto-refunded)",
+                "Autopay starts at INR 999/month after trial",
+                ...(features.length ? features : []),
+              ]
+            : features.length
+            ? features
+            : ["Standard feature access"];
 
           return (
             <article
@@ -462,10 +589,21 @@ export default function SubscriptionWorkspace({
               <p className="mt-1 text-xs text-slate-500">{config.description}</p>
 
               <div className="mt-4">
-                <p className="text-3xl font-bold text-slate-900">INR {showAmount}</p>
-                <p className="text-xs text-slate-500">
-                  / {billingCycle === "monthly" ? "30 days" : "365 days"} + GST extra
-                </p>
+                {isTrialAutopayCard ? (
+                  <>
+                    <p className="text-3xl font-bold text-slate-900">7-Day Free Trial</p>
+                    <p className="text-xs text-slate-500">
+                      INR 2 auth (auto-refund) - then INR 999/month autopay
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold text-slate-900">INR {showAmount}</p>
+                    <p className="text-xs text-slate-500">
+                      / {billingCycle === "monthly" ? "30 days" : "365 days"} + GST extra
+                    </p>
+                  </>
+                )}
               </div>
 
               <button
@@ -482,13 +620,15 @@ export default function SubscriptionWorkspace({
                   ? "Current Plan"
                   : loading === `${plan.key}_${billingCycle}`
                   ? "Opening Checkout..."
+                  : isTrialAutopayCard
+                  ? "Start 7-Day Trial"
                   : "Get Started"}
               </button>
 
               <div className="mt-4 border-t border-slate-100 pt-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Features</p>
                 <ul className="mt-2 space-y-1.5">
-                  {(features.length ? features : ["Standard feature access"]).map((feature) => (
+                  {displayFeatures.map((feature) => (
                     <li
                       key={`${plan.key}_${feature}`}
                       className="inline-flex w-full items-start gap-2 text-xs text-slate-700"
@@ -572,7 +712,7 @@ export default function SubscriptionWorkspace({
             </li>
             <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
               {product === "whatsapp"
-                ? "WhatsApp APIs check active `whatsapp_*` subscription before allowing actions."
+                ? "WhatsApp Starter monthly supports: 7-day trial + INR 2 auto-refund + INR 999/month Razorpay autopay."
                 : "Email Hub APIs check active `core_*` subscription before allowing actions."}
             </li>
           </ul>

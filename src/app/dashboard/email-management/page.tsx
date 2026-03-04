@@ -84,7 +84,7 @@ export default function EmailManagementPage() {
             onClick={() =>
               automationActive
                 ? router.push('/dashboard/email-activation')
-                : router.push('/dashboard/Subscriptions')
+                : router.push('/dashboard/email-hub/subscription')
             }
             className={`w-full py-2 rounded transition ${
               automationActive

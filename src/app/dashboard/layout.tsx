@@ -305,11 +305,6 @@ const MENU_GROUPS: MenuGroup[] = [
       },
       { name: "Leads", path: "/dashboard/leads", icon: <TrendingUp className="h-5 w-5" /> },
       { name: "Campaigns", path: "/dashboard/campaigns", icon: <BarChart3 className="h-5 w-5" /> },
-      {
-        name: "Subscriptions",
-        path: "/dashboard/Subscriptions",
-        icon: <Server className="h-5 w-5" />,
-      },
     ],
   },
   {
@@ -336,58 +331,55 @@ const HUB_ROOT_PATHS = new Set([
 const SIDEBAR_THEMES: Record<"default" | "hubBlue", SidebarTheme> = {
   default: {
     parentActive:
-      "border-indigo-400/45 bg-indigo-500/18 text-slate-50 shadow-[0_10px_24px_rgba(79,70,229,0.24)]",
+      "border border-blue-300/45 bg-blue-500/15 text-white shadow-[0_10px_20px_-16px_rgba(59,130,246,0.95)]",
     parentIdle:
-      "border border-transparent text-[var(--sidebar-text)] hover:border-indigo-500/20 hover:bg-indigo-500/14 hover:text-white",
-    iconActive: "text-indigo-100",
-    iconIdle: "text-slate-400 group-hover:text-indigo-100",
-    iconWrapActive: "grid h-7 w-7 place-items-center rounded-lg",
-    iconWrapIdle: "grid h-7 w-7 place-items-center rounded-lg",
+      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/30 hover:bg-slate-800/45 hover:text-white",
+    iconActive: "text-blue-100",
+    iconIdle: "text-slate-400 group-hover:text-blue-100",
+    iconWrapActive: "grid h-7 w-7 place-items-center rounded-lg bg-blue-500/20",
+    iconWrapIdle:
+      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/40 group-hover:bg-blue-500/12",
     submenuToggle:
-      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-indigo-500/15 hover:text-indigo-100",
-    submenuChevronExpanded: "rotate-180 text-indigo-200",
-    tailChevronActive: "translate-x-0 text-indigo-200",
-    tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-indigo-200",
-    childWrap: "ml-4 mt-2 space-y-1 border-l border-[var(--sidebar-divider)] pl-3",
-    childActive: "border border-indigo-400/20 bg-indigo-500/20 text-indigo-100",
+      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-700/60 hover:text-slate-100",
+    submenuChevronExpanded: "rotate-180 text-blue-200",
+    tailChevronActive: "translate-x-0 text-blue-200",
+    tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-blue-200",
+    childWrap: "ml-4 mt-2 space-y-1 border-l border-slate-700/70 pl-3",
+    childActive: "border border-blue-400/25 bg-blue-500/15 text-blue-100",
     childIdle:
-      "border border-transparent text-slate-300 hover:bg-indigo-500/12 hover:text-indigo-100",
-    childIconActive: "bg-indigo-400/20",
-    childIconIdle: "bg-white/10",
-    childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-indigo-200",
+      "border border-transparent text-slate-300 hover:bg-slate-800/50 hover:text-slate-100",
+    childIconActive: "bg-blue-400/20",
+    childIconIdle: "bg-slate-700/70",
+    childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-blue-200",
     subscriptionRing: "",
-    upgradeBadge: "border-indigo-300/35 bg-indigo-400/12 text-indigo-100",
+    upgradeBadge: "border-blue-300/35 bg-blue-500/10 text-blue-100",
   },
   hubBlue: {
     parentActive:
-      "border-sky-300/60 bg-[linear-gradient(125deg,rgba(56,189,248,0.34)_0%,rgba(37,99,235,0.76)_50%,rgba(9,14,35,0.98)_100%)] text-sky-50 shadow-[0_20px_42px_-20px_rgba(56,189,248,0.88)]",
+      "border border-sky-300/45 bg-sky-500/15 text-white shadow-[0_10px_20px_-16px_rgba(56,189,248,0.95)]",
     parentIdle:
-      "border-sky-400/15 bg-[linear-gradient(120deg,rgba(96,165,250,0.1)_0%,rgba(30,64,175,0.5)_62%,rgba(15,23,42,0.72)_100%)] text-sky-100/90 hover:border-sky-300/45 hover:bg-[linear-gradient(120deg,rgba(96,165,250,0.22)_0%,rgba(30,64,175,0.7)_62%,rgba(8,15,36,0.95)_100%)] hover:text-white",
+      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/30 hover:bg-slate-800/45 hover:text-white",
     iconActive: "text-sky-100",
-    iconIdle: "text-sky-300 group-hover:text-sky-100",
+    iconIdle: "text-slate-400 group-hover:text-sky-100",
     iconWrapActive:
-      "grid h-7 w-7 place-items-center rounded-lg border border-white/25 bg-white/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]",
+      "grid h-7 w-7 place-items-center rounded-lg bg-sky-500/20",
     iconWrapIdle:
-      "grid h-7 w-7 place-items-center rounded-lg border border-white/12 bg-white/[0.05] group-hover:bg-white/[0.12]",
+      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/40 group-hover:bg-sky-500/12",
     submenuToggle:
-      "mr-1.5 rounded-lg p-1.5 text-sky-300 transition hover:bg-sky-400/20 hover:text-sky-100",
+      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-700/60 hover:text-slate-100",
     submenuChevronExpanded: "rotate-180 text-sky-200",
     tailChevronActive: "translate-x-0 text-sky-200",
-    tailChevronIdle: "translate-x-0.5 text-sky-400 group-hover:text-sky-200",
-    childWrap: "ml-4 mt-2 space-y-1 border-l border-sky-400/30 pl-3",
+    tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-sky-200",
+    childWrap: "ml-4 mt-2 space-y-1 border-l border-slate-700/70 pl-3",
     childActive:
-      "border border-sky-300/35 bg-[linear-gradient(120deg,rgba(56,189,248,0.22)_0%,rgba(30,64,175,0.7)_100%)] text-sky-50 shadow-[0_8px_22px_-14px_rgba(56,189,248,0.85)]",
+      "border border-sky-300/35 bg-sky-500/15 text-sky-50",
     childIdle:
-      "border border-transparent text-sky-100/90 hover:border-sky-300/25 hover:bg-[linear-gradient(120deg,rgba(96,165,250,0.16)_0%,rgba(30,64,175,0.62)_100%)] hover:text-white",
-    childIconActive: "bg-sky-300/25 ring-1 ring-sky-200/35",
-    childIconIdle: "bg-sky-300/12",
+      "border border-transparent text-slate-300 hover:bg-slate-800/50 hover:text-slate-100",
+    childIconActive: "bg-sky-300/25",
+    childIconIdle: "bg-slate-700/70",
     childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-sky-200",
-    subscriptionRing: "ring-1 ring-sky-300/20",
-    upgradeBadge: "border-sky-300/35 bg-sky-400/12 text-sky-100",
-    badgeLabel: "Prime",
-    badgeClass:
-      "rounded-full border border-sky-300/40 bg-sky-400/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-sky-100",
-    withBackdrop: true,
+    subscriptionRing: "",
+    upgradeBadge: "border-sky-300/35 bg-sky-500/10 text-sky-100",
   },
 };
 
@@ -692,31 +684,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <>
       <style jsx global>{`
         .sidebar-shell {
-          --sidebar-primary: #0b1734;
-          --sidebar-accent: #2563eb;
-          --sidebar-hover: #3b82f6;
-          --sidebar-bg: #030712;
-          --sidebar-divider: rgba(148, 163, 184, 0.2);
-          --sidebar-text: #dbe7ff;
-          --sidebar-label: #9db3d9;
+          --sidebar-primary: #0f172a;
+          --sidebar-accent: #3b82f6;
+          --sidebar-hover: #60a5fa;
+          --sidebar-bg: #0f172a;
+          --sidebar-divider: rgba(148, 163, 184, 0.28);
+          --sidebar-text: #dbe3f1;
+          --sidebar-label: #94a3b8;
         }
         .layout-surface {
           background-image:
-            radial-gradient(circle at 12% -12%, rgba(59, 130, 246, 0.2), transparent 38%),
-            radial-gradient(circle at 84% 4%, rgba(14, 165, 233, 0.14), transparent 30%),
-            linear-gradient(180deg, #f8fbff 0%, #f3f7ff 46%, #edf3ff 100%);
-        }
-        .sidebar-pattern {
-          background-image:
-            radial-gradient(circle at 18% -14%, rgba(56, 189, 248, 0.2), transparent 36%),
-            linear-gradient(160deg, rgba(147, 197, 253, 0.09), transparent 45%),
-            repeating-linear-gradient(
-              145deg,
-              rgba(255, 255, 255, 0.035) 0px,
-              rgba(255, 255, 255, 0.035) 1px,
-              transparent 1px,
-              transparent 12px
-            );
+            radial-gradient(circle at 12% -10%, rgba(59, 130, 246, 0.12), transparent 36%),
+            radial-gradient(circle at 88% 6%, rgba(14, 165, 233, 0.1), transparent 28%),
+            linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
         }
         .app-scrollbar::-webkit-scrollbar {
           width: 7px;
@@ -764,15 +744,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <aside
           ref={sidebarRef}
           className={`
-            gpu-layer sidebar-motion-safe fixed left-0 top-0 z-50 h-screen overflow-hidden border-r border-[var(--sidebar-divider)] bg-[linear-gradient(180deg,var(--sidebar-bg)_0%,#06142d_45%,var(--sidebar-primary)_100%)] shadow-[0_28px_70px_-36px_rgba(2,6,23,0.95)]
+            gpu-layer sidebar-motion-safe fixed left-0 top-0 z-50 h-screen overflow-hidden border-r border-[var(--sidebar-divider)] bg-[var(--sidebar-bg)] shadow-[0_20px_45px_-28px_rgba(2,6,23,0.95)]
             transition-all duration-300 ease-out
             ${isCollapsed ? "lg:w-20 w-[84%] max-w-[320px]" : "lg:w-72 w-[84%] max-w-[320px]"}
             ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
             flex flex-col
           `}
         >
-          <div className="sidebar-pattern pointer-events-none absolute inset-0 opacity-80" />
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_center,rgba(125,211,252,0.22),transparent_72%)]" />
           <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-3">
@@ -817,45 +795,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 />
               </button>
             </div>
-
-            {!isCollapsed && (
-              <div className="mt-4 rounded-2xl border border-sky-300/20 bg-[linear-gradient(135deg,rgba(14,165,233,0.2)_0%,rgba(30,64,175,0.38)_52%,rgba(15,23,42,0.96)_100%)] px-3.5 py-3 text-sky-50 shadow-[0_18px_44px_-28px_rgba(14,165,233,0.9)]">
-                <div className="flex items-start gap-2.5">
-                  <span className="mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-sky-200/35 bg-sky-300/15">
-                    <Sparkles className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-100/80">
-                      Workspace
-                    </p>
-                    <p className="mt-0.5 truncate text-sm font-semibold text-white">
-                      Email AI & Services
-                    </p>
-                    <p className="mt-1 truncate text-xs text-sky-100/75">
-                      Unified automation for Email, WhatsApp and RCS
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {!isCollapsed && (
-            <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-3.5">
-              <div className="relative rounded-xl border border-slate-300/15 bg-slate-900/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" />
+            <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-3">
+              <div className="relative rounded-lg border border-slate-600/60 bg-slate-900/60">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search menu"
+                  placeholder="Find menu..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-transparent bg-transparent py-2.5 pl-10 pr-10 text-[14px] text-slate-100 outline-none placeholder:text-slate-400 transition focus:border-sky-300/45 focus:ring-2 focus:ring-sky-400/20"
+                  className="w-full rounded-lg border border-transparent bg-transparent py-2.5 pl-10 pr-10 text-sm text-slate-100 outline-none placeholder:text-slate-400 transition focus:border-blue-400/45 focus:ring-2 focus:ring-blue-400/20"
                   aria-label="Search menu items"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-sky-400/20 hover:text-sky-100"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-700/70 hover:text-slate-100"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -924,6 +881,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           : theme.tailChevronIdle;
                         const childWrapClass = theme.childWrap;
 
+                        const parentItemClass = `flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[11px] px-3 py-2.5 text-[14px] font-medium ${
+                          isCollapsed ? "justify-center px-2" : ""
+                        }`;
+                        const submenuId = `submenu-${item.path.replace(/[^\w-]/g, "-")}`;
+
                         return (
                           <div key={item.path} className="mb-1">
                             <div
@@ -934,24 +896,43 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                 ${isCollapsed ? "justify-center" : ""}
                               `}
                             >
-                              <Link
-                                href={item.path}
-                                title={isCollapsed ? item.name : undefined}
-                                className={`flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[11px] px-3 py-2.5 text-[14px] font-medium ${
-                                  isCollapsed ? "justify-center px-2" : ""
-                                }`}
-                                aria-current={active ? "page" : undefined}
-                              >
-                                <span className={iconWrapClass}>
-                                  <div className={iconClass}>{item.icon}</div>
-                                </span>
-                                {!isCollapsed && (
-                                  <span className="flex-1 truncate">{item.name}</span>
-                                )}
-                                {!isCollapsed && theme.badgeLabel && (
-                                  <span className={theme.badgeClass}>{theme.badgeLabel}</span>
-                                )}
-                              </Link>
+                              {hasChildren ? (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSubmenu(item.path)}
+                                  title={isCollapsed ? item.name : undefined}
+                                  className={`${parentItemClass} text-left`}
+                                  aria-expanded={isSubmenuExpanded}
+                                  aria-controls={submenuId}
+                                >
+                                  <span className={iconWrapClass}>
+                                    <div className={iconClass}>{item.icon}</div>
+                                  </span>
+                                  {!isCollapsed && (
+                                    <span className="flex-1 truncate">{item.name}</span>
+                                  )}
+                                  {!isCollapsed && theme.badgeLabel && (
+                                    <span className={theme.badgeClass}>{theme.badgeLabel}</span>
+                                  )}
+                                </button>
+                              ) : (
+                                <Link
+                                  href={item.path}
+                                  title={isCollapsed ? item.name : undefined}
+                                  className={parentItemClass}
+                                  aria-current={active ? "page" : undefined}
+                                >
+                                  <span className={iconWrapClass}>
+                                    <div className={iconClass}>{item.icon}</div>
+                                  </span>
+                                  {!isCollapsed && (
+                                    <span className="flex-1 truncate">{item.name}</span>
+                                  )}
+                                  {!isCollapsed && theme.badgeLabel && (
+                                    <span className={theme.badgeClass}>{theme.badgeLabel}</span>
+                                  )}
+                                </Link>
+                              )}
 
                               {!isCollapsed && hasChildren && (
                                 <button
@@ -983,7 +964,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                             </div>
 
                             {!isCollapsed && hasChildren && isSubmenuExpanded && (
-                              <div className={childWrapClass}>
+                              <div id={submenuId} className={childWrapClass}>
                                 {item.children?.map((child) => {
                                   const isChildActive = isPathMatch(child.path);
                                   const isSubscriptionChild = child.path.endsWith("/subscription");

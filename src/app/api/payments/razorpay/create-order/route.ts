@@ -13,16 +13,70 @@ type CreateOrderBody = {
   product?: unknown;
 };
 
+type RazorpayAuthConfig = {
+  keyId: string;
+  authHeader: string;
+};
+
+const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
+const TRIAL_AUTOPAY_TRIAL_DAYS = 7;
+const TRIAL_AUTOPAY_CHARGE_INR = 2;
+const TRIAL_AUTOPAY_RECURRING_INR = 999;
+const TRIAL_AUTOPAY_TOTAL_COUNT = 120;
+
 function asBillingCycle(value: string): BillingCycle {
   return value === "yearly" ? "yearly" : "monthly";
 }
 
-function getRazorpayAuthHeader() {
+function getRazorpayAuthHeader(): RazorpayAuthConfig | null {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId || !keySecret) return null;
   const basic = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   return { keyId, authHeader: `Basic ${basic}` };
+}
+
+function isTrialAutopayPlan(planKey: string, billingCycle: BillingCycle) {
+  return planKey === TRIAL_AUTOPAY_PLAN_KEY && billingCycle === "monthly";
+}
+
+async function ensureTrialAutopayPlanId(authHeader: string) {
+  const envPlanId = String(process.env.RAZORPAY_WHATSAPP_STARTER_999_PLAN_ID ?? "").trim();
+  if (envPlanId) return envPlanId;
+
+  const createPlanRes = await fetch("https://api.razorpay.com/v1/plans", {
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      period: "monthly",
+      interval: 1,
+      item: {
+        name: "WhatsApp Starter Monthly 999",
+        amount: TRIAL_AUTOPAY_RECURRING_INR * 100,
+        currency: "INR",
+        description: "Autopay recurring amount after 7-day trial",
+      },
+      notes: {
+        source: "vaiket_autopay_trial",
+        planKey: TRIAL_AUTOPAY_PLAN_KEY,
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const createPlanJson = await createPlanRes.json().catch(() => null);
+  if (!createPlanRes.ok || !createPlanJson?.id) {
+    throw new Error(
+      createPlanJson?.error?.description ||
+        createPlanJson?.error?.reason ||
+        "Razorpay plan creation failed"
+    );
+  }
+
+  return String(createPlanJson.id);
 }
 
 export async function POST(req: Request) {
@@ -69,7 +123,13 @@ export async function POST(req: Request) {
       }
     }
 
-    const amountInr = billingCycle === "yearly" ? plan.priceYear : plan.priceMonth;
+    const trialAutopayMode = isTrialAutopayPlan(plan.key, billingCycle);
+    const amountInr = trialAutopayMode
+      ? TRIAL_AUTOPAY_CHARGE_INR
+      : billingCycle === "yearly"
+      ? plan.priceYear
+      : plan.priceMonth;
+
     if (!amountInr || amountInr <= 0) {
       return NextResponse.json(
         { success: false, error: "Price not configured for selected cycle" },
@@ -102,6 +162,168 @@ export async function POST(req: Request) {
       select: { name: true, email: true, mobile: true },
     });
 
+    if (trialAutopayMode) {
+      let createdAutopaySubscriptionId: string | null = null;
+      try {
+        const nowUnix = Math.floor(Date.now() / 1000);
+        const startAtUnix = nowUnix + TRIAL_AUTOPAY_TRIAL_DAYS * 24 * 60 * 60;
+        const trialAutopayPlanId = await ensureTrialAutopayPlanId(authHeader.authHeader);
+
+        const autopayRes = await fetch("https://api.razorpay.com/v1/subscriptions", {
+          method: "POST",
+          headers: {
+            Authorization: authHeader.authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            plan_id: trialAutopayPlanId,
+            total_count: TRIAL_AUTOPAY_TOTAL_COUNT,
+            customer_notify: 0,
+            start_at: startAtUnix,
+            notes: {
+              subId: String(subscription.id),
+              planKey: plan.key,
+              billingCycle,
+              product: getPlanProduct(plan.key),
+              tenantId: String(auth.tenantId),
+              userId: String(auth.userId),
+              checkoutMode: "trial_autopay",
+            },
+          }),
+          cache: "no-store",
+        });
+        const autopayJson = await autopayRes.json().catch(() => null);
+
+        if (!autopayRes.ok || !autopayJson?.id) {
+          throw new Error(
+            autopayJson?.error?.description ||
+              autopayJson?.error?.reason ||
+              "Razorpay autopay subscription creation failed"
+          );
+        }
+
+        const autopaySubscriptionId = String(autopayJson.id);
+        createdAutopaySubscriptionId = autopaySubscriptionId;
+        const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
+          method: "POST",
+          headers: {
+            Authorization: authHeader.authHeader,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: amountInPaise,
+            currency: "INR",
+            receipt: `trial_${subscription.id}_${Date.now()}`,
+            notes: {
+              subId: String(subscription.id),
+              planKey: plan.key,
+              billingCycle,
+              product: getPlanProduct(plan.key),
+              tenantId: String(auth.tenantId),
+              userId: String(auth.userId),
+              checkoutMode: "trial_autopay",
+              autopaySubscriptionId,
+            },
+          }),
+          cache: "no-store",
+        });
+        const orderJson = await orderRes.json().catch(() => null);
+
+        if (!orderRes.ok || !orderJson?.id) {
+          throw new Error(
+            orderJson?.error?.description ||
+              orderJson?.error?.reason ||
+              "Razorpay trial order creation failed"
+          );
+        }
+
+        await prisma.userSubscription.update({
+          where: { id: subscription.id },
+          data: { paymentRef: autopaySubscriptionId },
+        });
+
+        await prisma.paymentLog.create({
+          data: {
+            tenantId: auth.tenantId,
+            userId: auth.userId,
+            provider: "razorpay",
+            providerRef: String(orderJson.id),
+            amount: TRIAL_AUTOPAY_CHARGE_INR,
+            currency: "INR",
+            status: "initiated",
+            meta: {
+              subscriptionId: subscription.id,
+              planKey: plan.key,
+              billingCycle,
+              checkoutMode: "trial_autopay",
+              autopaySubscriptionId,
+              trialDays: TRIAL_AUTOPAY_TRIAL_DAYS,
+              recurringAmountInr: TRIAL_AUTOPAY_RECURRING_INR,
+              autopayStartAtUnix: startAtUnix,
+            },
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          provider: "razorpay",
+          checkoutMode: "trial_autopay",
+          subId: subscription.id,
+          orderId: String(orderJson.id),
+          amount: TRIAL_AUTOPAY_CHARGE_INR,
+          amountInPaise,
+          currency: String(orderJson.currency || "INR"),
+          keyId: authHeader.keyId,
+          planKey: plan.key,
+          planTitle: plan.title,
+          product: getPlanProduct(plan.key),
+          billingCycle,
+          autopaySubscriptionId,
+          autopayStartAt: new Date(startAtUnix * 1000).toISOString(),
+          trialDays: TRIAL_AUTOPAY_TRIAL_DAYS,
+          recurringAmountInr: TRIAL_AUTOPAY_RECURRING_INR,
+          customer: {
+            name: user?.name || "User",
+            email: user?.email || auth.email,
+            contact: user?.mobile || undefined,
+          },
+        });
+      } catch (autopayError) {
+        if (createdAutopaySubscriptionId) {
+          await fetch(
+            `https://api.razorpay.com/v1/subscriptions/${encodeURIComponent(
+              createdAutopaySubscriptionId
+            )}/cancel`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: authHeader.authHeader,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ cancel_at_cycle_end: 0 }),
+              cache: "no-store",
+            }
+          ).catch(() => null);
+        }
+
+        await prisma.userSubscription.update({
+          where: { id: subscription.id },
+          data: { status: "cancelled" },
+        });
+
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              autopayError instanceof Error
+                ? autopayError.message
+                : "Unable to start trial autopay checkout",
+          },
+          { status: 502 }
+        );
+      }
+    }
+
     const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {
@@ -119,6 +341,7 @@ export async function POST(req: Request) {
           product: getPlanProduct(plan.key),
           tenantId: String(auth.tenantId),
           userId: String(auth.userId),
+          checkoutMode: "one_time",
         },
       }),
       cache: "no-store",
@@ -160,6 +383,7 @@ export async function POST(req: Request) {
           subscriptionId: subscription.id,
           planKey: plan.key,
           billingCycle,
+          checkoutMode: "one_time",
         },
       },
     });
@@ -167,6 +391,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       provider: "razorpay",
+      checkoutMode: "one_time",
       subId: subscription.id,
       orderId: String(orderJson.id),
       amount: amountInr,

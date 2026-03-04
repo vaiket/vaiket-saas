@@ -16,6 +16,6 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.redirect(
-    new URL("/dashboard/Subscriptions?payment=failed", req.url)
+    new URL("/dashboard/billing?payment=failed", req.url)
   );
 }
