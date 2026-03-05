@@ -30,6 +30,7 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsLeft,
+  ExternalLink,
   SendHorizontal,
   Zap,
 } from "lucide-react";
@@ -58,6 +59,14 @@ type MenuItem = {
 type MenuGroup = {
   name: string;
   items: MenuItem[];
+};
+
+type HubLauncherItem = {
+  name: string;
+  path: string;
+  subtitle: string;
+  logoPath: string;
+  logoAlt: string;
 };
 
 type SidebarTheme = {
@@ -318,6 +327,39 @@ const MENU_GROUPS: MenuGroup[] = [
   },
 ];
 
+const HUB_LAUNCHER_APPS: HubLauncherItem[] = [
+  {
+    name: "WhatsApp Hub",
+    path: "/dashboard/whatsapp",
+    subtitle: "Accounts, inbox, automation",
+    logoPath: "/launcher/whatsapp-logo.svg",
+    logoAlt: "WhatsApp logo",
+  },
+  {
+    name: "Email Hub",
+    path: "/dashboard/email-hub",
+    subtitle: "Mailboxes, campaigns, inbox",
+    logoPath: "/launcher/mail-logo.svg",
+    logoAlt: "Mail logo",
+  },
+  {
+    name: "RCS Hub",
+    path: "/dashboard/rcs",
+    subtitle: "RCS inbox, workflows, analytics",
+    logoPath: "/launcher/rcs-logo.svg",
+    logoAlt: "RCS logo",
+  },
+];
+
+const APPS_LAUNCHER_DOT_COLORS = [
+  "bg-sky-500",
+  "bg-indigo-500",
+  "bg-violet-500",
+  "bg-cyan-400",
+  "bg-blue-500",
+  "bg-fuchsia-500",
+];
+
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
@@ -406,7 +448,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [user, setUser] = useState<AppUser | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [appsMenuOpen, setAppsMenuOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const appsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -508,8 +552,36 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [profileMenuOpen]);
 
   useEffect(() => {
+    if (!appsMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        appsMenuRef.current &&
+        !appsMenuRef.current.contains(event.target as Node)
+      ) {
+        setAppsMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAppsMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [appsMenuOpen]);
+
+  useEffect(() => {
     setIsSidebarOpen(false);
     setProfileMenuOpen(false);
+    setAppsMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -551,6 +623,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const goTo = (path: string) => {
     setProfileMenuOpen(false);
+    setAppsMenuOpen(false);
     router.push(path);
   };
 
@@ -1105,9 +1178,79 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   Tenant Workspace
                 </div>
 
+                <div className="relative" ref={appsMenuRef}>
+                  <button
+                    onClick={() => {
+                      setAppsMenuOpen((prev) => !prev);
+                      setProfileMenuOpen(false);
+                    }}
+                    className={`group relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/90 bg-[radial-gradient(circle_at_15%_15%,#dbeafe_0%,#ffffff_42%,#e0e7ff_100%)] shadow-[0_8px_18px_-16px_rgba(15,23,42,0.7)] transition hover:border-blue-200 hover:shadow-[0_14px_30px_-22px_rgba(59,130,246,0.9)] ${
+                      appsMenuOpen ? "border-blue-300 bg-[radial-gradient(circle_at_20%_20%,#c7d2fe_0%,#eff6ff_48%,#e9d5ff_100%)]" : ""
+                    }`}
+                    aria-label="Open apps launcher"
+                    title="Apps"
+                  >
+                    <span className="grid grid-cols-3 gap-1">
+                      {APPS_LAUNCHER_DOT_COLORS.map((color, idx) => (
+                        <span
+                          key={`apps_dot_${idx}`}
+                          className={`h-1.5 w-1.5 rounded-full ${color} transition-all duration-300 ${
+                            appsMenuOpen
+                              ? "scale-110 animate-pulse"
+                              : "group-hover:scale-110"
+                          } ${idx % 2 === 0 ? "group-hover:-translate-y-0.5" : "group-hover:translate-y-0.5"}`}
+                          style={appsMenuOpen ? { animationDelay: `${idx * 90}ms` } : undefined}
+                        />
+                      ))}
+                    </span>
+                  </button>
+
+                  {appsMenuOpen && (
+                    <div className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_48px_-28px_rgba(15,23,42,0.5)]">
+                      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-900">Apps</p>
+                        <p className="text-xs text-slate-500">Quick switch between Vaiket hubs</p>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2.5 p-3">
+                        {HUB_LAUNCHER_APPS.map((app) => {
+                          const active = isPathMatch(app.path);
+                          return (
+                            <button
+                              key={app.path}
+                              onClick={() => goTo(app.path)}
+                              className={`group relative rounded-2xl border p-2.5 text-left transition ${
+                                active
+                                  ? "border-blue-300 bg-blue-50 shadow-[0_12px_26px_-20px_rgba(37,99,235,0.9)]"
+                                  : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/50"
+                              }`}
+                            >
+                              <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white ring-4 ring-slate-50">
+                                <Image
+                                  src={app.logoPath}
+                                  alt={app.logoAlt}
+                                  width={24}
+                                  height={24}
+                                  className="h-6 w-6 object-contain"
+                                />
+                              </div>
+                              <p className="truncate text-xs font-semibold text-slate-900">{app.name}</p>
+                              <p className="mt-1 min-h-[28px] text-[11px] leading-tight text-slate-500">{app.subtitle}</p>
+                              <ExternalLink className={`absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-300 transition ${active ? "text-blue-500" : "group-hover:text-blue-500"}`} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="relative" ref={profileMenuRef}>
                   <button
-                    onClick={() => setProfileMenuOpen((prev) => !prev)}
+                    onClick={() => {
+                      setProfileMenuOpen((prev) => !prev);
+                      setAppsMenuOpen(false);
+                    }}
                     className="group flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-2.5 py-1.5 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.7)] transition hover:border-blue-200 hover:bg-blue-50/50"
                     aria-label="Open profile menu"
                   >
