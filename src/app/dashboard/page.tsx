@@ -434,6 +434,27 @@ export default function DashboardPage() {
     },
   ] as const;
 
+  const heroPulseStats = [
+    {
+      label: "Live chats",
+      value: formatCompact(waConversations.length),
+      tone: "text-emerald-300",
+    },
+    {
+      label: "Mail threads",
+      value: formatCompact(mailContacts.length),
+      tone: "text-sky-300",
+    },
+    {
+      label: "Pending queue",
+      value: formatCompact(health?.queue?.pendingEmails ?? 0),
+      tone:
+        (health?.queue?.failedEmails ?? 0) > 0
+          ? "text-rose-300"
+          : "text-amber-200",
+    },
+  ] as const;
+
   const waSelectedConversation = useMemo(
     () => waConversations.find((item) => item.id === waSelectedConversationId) || null,
     [waConversations, waSelectedConversationId]
@@ -731,39 +752,43 @@ export default function DashboardPage() {
   if (loading && !stats) {
     return (
       <div className="space-y-6">
-        <div className="h-44 animate-pulse rounded-3xl border border-slate-200 bg-white/75" />
+        <div className="h-44 animate-pulse rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-white" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           {Array.from({ length: 5 }).map((_, index) => (
             <div
               key={index}
-              className="h-36 animate-pulse rounded-2xl border border-slate-200 bg-white/75"
+              className="h-36 animate-pulse rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-100 to-white"
             />
           ))}
         </div>
         <div className="grid gap-6 xl:grid-cols-12">
-          <div className="h-96 animate-pulse rounded-3xl border border-slate-200 bg-white/75 xl:col-span-8" />
-          <div className="h-96 animate-pulse rounded-3xl border border-slate-200 bg-white/75 xl:col-span-4" />
+          <div className="h-96 animate-pulse rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-white xl:col-span-8" />
+          <div className="h-96 animate-pulse rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-100 to-white xl:col-span-4" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 text-white shadow-xl">
-        <div className="pointer-events-none absolute -left-16 top-0 h-48 w-48 rounded-full bg-blue-500/25 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-emerald-400/20 blur-3xl" />
+    <div className="relative space-y-6 pb-2">
+      <div className="pointer-events-none absolute -top-20 -z-10 h-64 w-64 rounded-full bg-indigo-400/20 blur-3xl" />
+      <div className="pointer-events-none absolute right-10 top-12 -z-10 h-64 w-64 rounded-full bg-sky-300/20 blur-3xl" />
+
+      <section className="relative overflow-hidden rounded-3xl border border-indigo-200/50 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 p-6 text-white shadow-[0_30px_80px_-45px_rgba(15,23,42,0.9)]">
+        <div className="pointer-events-none absolute -left-16 top-0 h-48 w-48 rounded-full bg-blue-500/30 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 right-0 h-72 w-72 rounded-full bg-violet-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute left-1/2 top-10 h-40 w-72 -translate-x-1/2 rounded-full bg-cyan-400/10 blur-3xl" />
 
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-100">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-100 backdrop-blur">
               <Sparkles className="h-3.5 w-3.5" />
-              Premium Overview
+              Production Overview
             </div>
 
             <div>
               <h2 className="text-2xl font-semibold md:text-3xl">Operations Command Center</h2>
-              <p className="mt-2 max-w-2xl text-sm text-slate-200 md:text-base">
+              <p className="mt-2 max-w-2xl text-sm text-slate-200/95 md:text-base">
                 High-clarity dashboard for traffic, messaging, automation health, and revenue
                 signals. Designed for fast decisions.
               </p>
@@ -785,28 +810,42 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <button
-              onClick={() => loadDashboard(true)}
-              disabled={refreshing}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {refreshing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Refresh data
-            </button>
+          <div className="w-full max-w-sm space-y-3 xl:max-w-[360px]">
+            <div className="grid grid-cols-3 gap-2">
+              {heroPulseStats.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 backdrop-blur"
+                >
+                  <p className="text-[10px] uppercase tracking-wide text-slate-200">{item.label}</p>
+                  <p className={`mt-1 text-lg font-semibold ${item.tone}`}>{item.value}</p>
+                </div>
+              ))}
+            </div>
 
-            <button
-              onClick={retryQueue}
-              disabled={retrying}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
-              Retry queue
-            </button>
+            <div className="flex w-full flex-col gap-2 sm:flex-row">
+              <button
+                onClick={() => loadDashboard(true)}
+                disabled={refreshing}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {refreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Refresh
+              </button>
+
+              <button
+                onClick={retryQueue}
+                disabled={retrying}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+                Retry queue
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -824,7 +863,7 @@ export default function DashboardPage() {
           return (
             <article
               key={item.title}
-              className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group rounded-2xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -844,7 +883,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-12">
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-8">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md xl:col-span-8">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-slate-900">Traffic performance</h3>
@@ -860,7 +899,7 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md xl:col-span-4">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-900">AI provider mix</h3>
             <p className="text-sm text-slate-500">Routing distribution for model usage and cost control.</p>
@@ -894,7 +933,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-12">
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md xl:col-span-4">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-900">System health</h3>
             <p className="text-sm text-slate-500">Infra and worker status for tenant operations.</p>
@@ -935,7 +974,7 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md xl:col-span-4">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Mail processing volume</h3>
             <p className="text-sm text-slate-500">Daily incoming email batches and process intensity.</p>
@@ -945,7 +984,7 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-4">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md xl:col-span-4">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Recent inbox activity</h3>
             <p className="text-sm text-slate-500">Most recent customer conversations and subjects.</p>
@@ -971,7 +1010,7 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Business snapshot</h3>
             <p className="text-sm text-slate-500">Tenant level productivity indicators and response posture.</p>
@@ -987,7 +1026,7 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-slate-900">Quick actions</h3>
             <p className="text-sm text-slate-500">Jump into high-impact modules from one place.</p>
@@ -1022,36 +1061,42 @@ export default function DashboardPage() {
         </article>
       </section>
 
+      <section className="flex flex-col gap-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Channel Command</p>
+        <h3 className="text-xl font-semibold text-slate-900">WhatsApp Live Desk</h3>
+        <p className="text-sm text-slate-500">Monitor active customer conversations and send quick replies without leaving overview.</p>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
-        <article className="overflow-hidden rounded-3xl border border-[#c9d6cc] bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-[#d7ddd8] bg-[#f7f9f8] px-4 py-4">
-            <h3 className="text-2xl font-semibold tracking-tight text-[#111b21]">Conversations</h3>
-            <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-[#e7f2ec] px-2 text-sm font-semibold text-[#1f6f54]">
+        <article className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/50 px-4 py-4">
+            <h3 className="text-lg font-semibold tracking-tight text-[#111b21]">Conversations</h3>
+            <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-emerald-100 px-2 text-sm font-semibold text-emerald-700">
               {waFilteredConversations.length}
             </span>
           </div>
 
-          <div className="border-b border-[#d7ddd8] bg-[#f7f9f8] px-4 py-3">
+          <div className="border-b border-emerald-100 bg-emerald-50/50 px-4 py-3">
             <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7c74]" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-700/60" />
               <input
                 type="text"
                 value={waQuery}
                 onChange={(event) => setWaQuery(event.target.value)}
                 placeholder="Search chats"
                 aria-label="Search chats"
-                className="w-full rounded-xl border border-[#bfd0c4] bg-white py-2.5 pl-9 pr-3 text-sm text-[#3a4a42] outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#00a884]/20"
+                className="w-full rounded-xl border border-emerald-200 bg-white py-2.5 pl-9 pr-3 text-sm text-[#3a4a42] outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               />
             </label>
           </div>
 
-          <div className="min-h-[420px] max-h-[520px] space-y-2 overflow-y-auto bg-[#f5f7f6] px-3 py-3">
+          <div className="min-h-[420px] max-h-[520px] space-y-2 overflow-y-auto bg-[#f9fbfa] px-3 py-3">
             {waLoadingConversations ? (
-              <p className="rounded-2xl border border-[#d7ddd8] bg-white px-4 py-3 text-sm text-[#5c6b64]">
+              <p className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-[#5c6b64]">
                 Loading conversations...
               </p>
             ) : waFilteredConversations.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[#bfd0c4] bg-white px-4 py-3 text-lg text-[#5c6b64]">
+              <p className="rounded-2xl border border-dashed border-emerald-200 bg-white px-4 py-3 text-sm text-[#5c6b64]">
                 No conversations found.
               </p>
             ) : (
@@ -1064,8 +1109,8 @@ export default function DashboardPage() {
                     onClick={() => setWaSelectedConversationId(item.id)}
                     className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${
                       selected
-                        ? "border-[#9fd9c5] bg-[#e7f6ef]"
-                        : "border-[#d7ddd8] bg-white hover:border-[#bfd0c4] hover:bg-[#f6fbf8]"
+                        ? "border-emerald-200 bg-emerald-50"
+                        : "border-emerald-100 bg-white hover:border-emerald-200 hover:bg-emerald-50/50"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -1084,15 +1129,15 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="relative overflow-hidden rounded-3xl border border-[#c9d6cc] bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-[#054c44] bg-[#075e54] px-4 py-3">
+        <article className="relative overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-emerald-700 bg-gradient-to-r from-emerald-700 to-emerald-600 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-white">WhatsApp Preview</p>
               <p className="text-xs text-emerald-100">Chat and reply directly from dashboard</p>
             </div>
             <Link
               href="/dashboard/whatsapp/inbox"
-              className="inline-flex items-center gap-1 rounded-lg border border-[#0f8f79] bg-[#0b7f6d] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0f8f79]"
+              className="inline-flex items-center gap-1 rounded-lg border border-emerald-300/50 bg-emerald-500/30 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-500/45"
             >
               Open full inbox
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -1107,11 +1152,11 @@ export default function DashboardPage() {
 
           {!waSelectedConversation ? (
             <div className="flex min-h-[495px] items-center justify-center px-5 text-center">
-              <p className="text-3xl text-slate-500">Select chat to view contact details.</p>
+              <p className="text-base text-slate-500">Select a conversation to view messages.</p>
             </div>
           ) : (
             <div className="flex min-h-[495px] flex-col">
-              <div className="border-b border-[#d3dbd5] bg-[#f0f2f5] px-4 py-3">
+              <div className="border-b border-emerald-100 bg-emerald-50/40 px-4 py-3">
                 <p className="truncate text-sm font-semibold text-[#111b21]">
                   {waSelectedConversation.contact.name || waSelectedConversation.contact.phone}
                 </p>
@@ -1155,8 +1200,8 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="border-t border-[#d3dbd5] bg-[#f0f2f5] px-3 py-3">
-                <div className="mb-2 rounded-xl border border-[#d3dbd5] bg-white px-3 py-2 text-xs text-[#54656f]">
+              <div className="border-t border-emerald-100 bg-emerald-50/40 px-3 py-3">
+                <div className="mb-2 rounded-xl border border-emerald-100 bg-white px-3 py-2 text-xs text-[#54656f]">
                   <p>Contact: {waSelectedConversation.contact.name || "-"}</p>
                   <p>Phone: {waSelectedConversation.contact.phone}</p>
                   <p>Opt-in: {waSelectedConversation.contact.optedIn ? "Yes" : "No"}</p>
@@ -1173,15 +1218,15 @@ export default function DashboardPage() {
                       }
                     }}
                     placeholder="Type WhatsApp reply..."
-                    className="h-10 flex-1 rounded-xl border border-[#d3dbd5] bg-white px-3 text-sm text-[#111b21] placeholder:text-[#8696a0] outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#00a884]/20"
+                    className="h-10 flex-1 rounded-xl border border-emerald-200 bg-white px-3 text-sm text-[#111b21] placeholder:text-[#8696a0] outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
                   />
                   <button
                     type="button"
                     onClick={() => void sendWaMessage()}
                     disabled={waSending || !waText.trim()}
-                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#00a884] px-4 text-sm font-semibold text-white transition hover:bg-[#019173] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {waSending ? "..." : "Send"}
+                    {waSending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
                   </button>
                 </div>
               </div>
@@ -1190,36 +1235,42 @@ export default function DashboardPage() {
         </article>
       </section>
 
+      <section className="flex flex-col gap-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Inbox Intelligence</p>
+        <h3 className="text-xl font-semibold text-slate-900">Email Live Desk</h3>
+        <p className="text-sm text-slate-500">Review threads, send replies, and monitor mailbox activity from one unified pane.</p>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
-        <article className="overflow-hidden rounded-3xl border border-[#ccd7e6] bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-[#d6dfec] bg-[#f3f6fb] px-4 py-4">
-            <h3 className="text-2xl font-semibold tracking-tight text-[#0f2d4a]">Email Conversations</h3>
-            <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-[#e6edf8] px-2 text-sm font-semibold text-[#1d4f80]">
+        <article className="overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50/60 px-4 py-4">
+            <h3 className="text-lg font-semibold tracking-tight text-[#0f2d4a]">Email Conversations</h3>
+            <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-blue-100 px-2 text-sm font-semibold text-blue-700">
               {mailFilteredContacts.length}
             </span>
           </div>
 
-          <div className="border-b border-[#d6dfec] bg-[#f3f6fb] px-4 py-3">
+          <div className="border-b border-blue-100 bg-blue-50/60 px-4 py-3">
             <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7f99]" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-700/60" />
               <input
                 type="text"
                 value={mailQuery}
                 onChange={(event) => setMailQuery(event.target.value)}
                 placeholder="Search emails"
                 aria-label="Search emails"
-                className="w-full rounded-xl border border-[#bfd0e6] bg-white py-2.5 pl-9 pr-3 text-sm text-[#35516d] outline-none transition focus:border-[#0d3b66] focus:ring-2 focus:ring-[#0d3b66]/20"
+                className="w-full rounded-xl border border-blue-200 bg-white py-2.5 pl-9 pr-3 text-sm text-[#35516d] outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
               />
             </label>
           </div>
 
           <div className="min-h-[420px] max-h-[520px] space-y-2 overflow-y-auto bg-[#f8fbff] px-3 py-3">
             {mailLoadingContacts ? (
-              <p className="rounded-2xl border border-[#d6dfec] bg-white px-4 py-3 text-sm text-[#5b7088]">
+              <p className="rounded-2xl border border-blue-100 bg-white px-4 py-3 text-sm text-[#5b7088]">
                 Loading email conversations...
               </p>
             ) : mailFilteredContacts.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-[#bfd0e6] bg-white px-4 py-3 text-lg text-[#5b7088]">
+              <p className="rounded-2xl border border-dashed border-blue-200 bg-white px-4 py-3 text-sm text-[#5b7088]">
                 No email conversations found.
               </p>
             ) : (
@@ -1232,8 +1283,8 @@ export default function DashboardPage() {
                     onClick={() => setMailSelectedEmail(contact.email)}
                     className={`w-full rounded-2xl border px-3 py-2.5 text-left transition ${
                       selected
-                        ? "border-[#8fb2d9] bg-[#e9f1fb]"
-                        : "border-[#d6dfec] bg-white hover:border-[#bfd0e6] hover:bg-[#f5f9ff]"
+                        ? "border-blue-200 bg-blue-50"
+                        : "border-blue-100 bg-white hover:border-blue-200 hover:bg-blue-50/50"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -1252,15 +1303,15 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        <article className="relative overflow-hidden rounded-3xl border border-[#ccd7e6] bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-[#0a2f4f] bg-[#0d3b66] px-4 py-3">
+        <article className="relative overflow-hidden rounded-3xl border border-blue-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-blue-900 bg-gradient-to-r from-blue-900 to-blue-800 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-white">Email Preview</p>
               <p className="text-xs text-blue-100">Read and reply from dashboard</p>
             </div>
             <Link
               href="/dashboard/mail-inbox"
-              className="inline-flex items-center gap-1 rounded-lg border border-[#2f5d8a] bg-[#1a4a78] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#235381]"
+              className="inline-flex items-center gap-1 rounded-lg border border-blue-300/30 bg-blue-700/35 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700/55"
             >
               Open full inbox
               <ArrowUpRight className="h-3.5 w-3.5" />
@@ -1275,11 +1326,11 @@ export default function DashboardPage() {
 
           {!mailSelectedEmail ? (
             <div className="flex min-h-[495px] items-center justify-center px-5 text-center">
-              <p className="text-3xl text-[#5b7088]">Select email to preview thread.</p>
+              <p className="text-base text-[#5b7088]">Select an email thread to preview messages.</p>
             </div>
           ) : (
             <div className="flex min-h-[495px] flex-col">
-              <div className="border-b border-[#d6dfec] bg-[#eef3f9] px-4 py-3">
+              <div className="border-b border-blue-100 bg-blue-50/60 px-4 py-3">
                 <p className="truncate text-sm font-semibold text-[#0f2d4a]">{mailSelectedEmail}</p>
                 <p className="truncate text-xs text-[#5b7088]">
                   Thread messages: {mailMessages.length}
@@ -1337,12 +1388,12 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="border-t border-[#d6dfec] bg-[#eef3f9] px-3 py-3">
+              <div className="border-t border-blue-100 bg-blue-50/60 px-3 py-3">
                 <input
                   value={mailSubject}
                   onChange={(event) => setMailSubject(event.target.value)}
                   placeholder="Subject (optional)"
-                  className="mb-2 h-9 w-full rounded-xl border border-[#bfd0e6] bg-white px-3 text-xs text-[#35516d] placeholder:text-[#7f93ad] outline-none transition focus:border-[#0d3b66] focus:ring-2 focus:ring-[#0d3b66]/20"
+                  className="mb-2 h-9 w-full rounded-xl border border-blue-200 bg-white px-3 text-xs text-[#35516d] placeholder:text-[#7f93ad] outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                 />
                 <div className="flex items-center gap-2">
                   <input
@@ -1355,15 +1406,15 @@ export default function DashboardPage() {
                       }
                     }}
                     placeholder="Type email reply..."
-                    className="h-10 flex-1 rounded-xl border border-[#bfd0e6] bg-white px-3 text-sm text-[#0f2d4a] placeholder:text-[#7f93ad] outline-none transition focus:border-[#0d3b66] focus:ring-2 focus:ring-[#0d3b66]/20"
+                    className="h-10 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-sm text-[#0f2d4a] placeholder:text-[#7f93ad] outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20"
                   />
                   <button
                     type="button"
                     onClick={() => void sendMailReply()}
                     disabled={mailSending || !mailSelectedEmail || !mailBody.trim()}
-                    className="inline-flex h-10 items-center justify-center rounded-xl bg-[#0d3b66] px-4 text-sm font-semibold text-white transition hover:bg-[#0a2f4f] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-10 items-center justify-center rounded-xl bg-blue-900 px-4 text-sm font-semibold text-white transition hover:bg-blue-950 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {mailSending ? "..." : "Send"}
+                    {mailSending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
                   </button>
                 </div>
               </div>
@@ -1372,7 +1423,7 @@ export default function DashboardPage() {
         </article>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white to-slate-50 p-4 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
             {health?.queue?.failedEmails ? (
@@ -1426,7 +1477,7 @@ function HealthRow({
   healthy: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white px-3 py-2.5">
       <div className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
         <span className="text-slate-500">{icon}</span>
         {label}
@@ -1446,7 +1497,7 @@ function HealthRow({
 
 function SnapshotCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+    <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-3 py-3">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
     </div>
@@ -1467,7 +1518,7 @@ function QuickLinkCard({
   return (
     <Link
       href={href}
-      className="group rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 transition hover:border-blue-300 hover:bg-blue-50"
+      className="group rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-3 py-3 transition hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50"
     >
       <div className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-slate-600 shadow-sm transition group-hover:text-blue-700">
         {icon}
