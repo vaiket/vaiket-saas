@@ -16,8 +16,8 @@ type SendMessageBody = {
 };
 
 type SupportedMessageType = "text" | "image" | "video" | "audio" | "document";
-const DEFAULT_FETCH_LIMIT = 180;
-const MAX_FETCH_LIMIT = 500;
+const DEFAULT_FETCH_LIMIT = 20;
+const MAX_FETCH_LIMIT = 200;
 
 async function readJsonSafe(req: Request): Promise<SendMessageBody | null> {
   try {
@@ -65,152 +65,43 @@ function normalizeMediaUrlForMeta(raw: string, req: Request) {
 }
 
 export async function GET(req: Request) {
-  const auth = await getAuthContext(req);
-  if (!auth) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
 
-  if (!hasRoleAtLeast(auth.role, "member")) {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
+    if (!hasRoleAtLeast(auth.role, "member")) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
 
-  const subscriptionBlocked = await ensureWhatsAppSubscriptionAccess(auth);
-  if (subscriptionBlocked) return subscriptionBlocked;
+    const subscriptionBlocked = await ensureWhatsAppSubscriptionAccess(auth);
+    if (subscriptionBlocked) return subscriptionBlocked;
 
-  const url = new URL(req.url);
-  const conversationId = url.searchParams.get("conversationId")?.trim() || "";
-  const limit = readBoundedInt(url.searchParams.get("limit"), DEFAULT_FETCH_LIMIT, 20, MAX_FETCH_LIMIT);
+    const url = new URL(req.url);
+    const conversationId = url.searchParams.get("conversationId")?.trim() || "";
+    const limit = readBoundedInt(url.searchParams.get("limit"), DEFAULT_FETCH_LIMIT, 20, MAX_FETCH_LIMIT);
 
-  if (!conversationId) {
-    return NextResponse.json(
-      { success: false, error: "conversationId is required" },
-      { status: 400 }
-    );
-  }
+    if (!conversationId) {
+      return NextResponse.json(
+        { success: false, error: "conversationId is required" },
+        { status: 400 }
+      );
+    }
 
-  const conversation = await prisma.waConversation.findFirst({
-    where: { id: conversationId, tenantId: auth.tenantId },
-    select: { id: true },
-  });
+    const conversation = await prisma.waConversation.findFirst({
+      where: { id: conversationId, tenantId: auth.tenantId },
+      select: { id: true },
+    });
 
-  if (!conversation) {
-    return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 });
-  }
+    if (!conversation) {
+      return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 });
+    }
 
-  const messagesDesc = await prisma.waMessage.findMany({
-    where: { tenantId: auth.tenantId, conversationId },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      direction: true,
-      messageType: true,
-      text: true,
-      mediaUrl: true,
-      status: true,
-      providerMessageId: true,
-      createdAt: true,
-      deliveredAt: true,
-      readAt: true,
-    },
-  });
-
-  const messages = [...messagesDesc].reverse();
-
-  return NextResponse.json({ success: true, messages });
-}
-
-export async function POST(req: Request) {
-  const auth = await getAuthContext(req);
-  if (!auth) {
-    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!hasRoleAtLeast(auth.role, "member")) {
-    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
-  }
-
-  const subscriptionBlocked = await ensureWhatsAppSubscriptionAccess(auth);
-  if (subscriptionBlocked) return subscriptionBlocked;
-
-  const body = await readJsonSafe(req);
-  if (!body) {
-    return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  const conversationId = String(body.conversationId ?? "").trim();
-  const text = String(body.text ?? "").trim();
-  const rawMediaUrl = String(body.mediaUrl ?? "").trim();
-  const fileName = String(body.fileName ?? "").trim();
-  const messageType = normalizeMessageType(String(body.messageType ?? ""), rawMediaUrl);
-  const mediaUrlForMeta = normalizeMediaUrlForMeta(rawMediaUrl, req);
-
-  if (!conversationId) {
-    return NextResponse.json({ success: false, error: "conversationId is required" }, { status: 400 });
-  }
-
-  if (messageType === "text" && !text) {
-    return NextResponse.json(
-      { success: false, error: "text is required for text messages" },
-      { status: 400 }
-    );
-  }
-
-  if (messageType !== "text" && !mediaUrlForMeta) {
-    return NextResponse.json(
-      { success: false, error: "mediaUrl is required for media messages" },
-      { status: 400 }
-    );
-  }
-
-  const now = new Date();
-  const conversation = await prisma.waConversation.findFirst({
-    where: { id: conversationId, tenantId: auth.tenantId },
-    select: {
-      id: true,
-      accountId: true,
-      contactId: true,
-      contact: {
-        select: {
-          phone: true,
-        },
-      },
-      account: {
-        select: {
-          phoneNumberId: true,
-          accessToken: true,
-        },
-      },
-    },
-  });
-
-  if (!conversation) {
-    return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 });
-  }
-
-  if (!conversation.account.accessToken || !conversation.account.phoneNumberId) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: "Account is missing Meta access token or phoneNumberId",
-      },
-      { status: 400 }
-    );
-  }
-
-  const message = await prisma.$transaction(async (tx) => {
-    const created = await tx.waMessage.create({
-      data: {
-        tenantId: auth.tenantId,
-        conversationId: conversation.id,
-        accountId: conversation.accountId,
-        direction: "outbound",
-        messageType,
-        text: text || null,
-        mediaUrl: mediaUrlForMeta || null,
-        status: "processing",
-        sentByUserId: auth.userId,
-      },
+    const messagesDesc = await prisma.waMessage.findMany({
+      where: { tenantId: auth.tenantId, conversationId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
       select: {
         id: true,
         direction: true,
@@ -218,102 +109,233 @@ export async function POST(req: Request) {
         text: true,
         mediaUrl: true,
         status: true,
-        createdAt: true,
         providerMessageId: true,
+        createdAt: true,
+        deliveredAt: true,
+        readAt: true,
       },
     });
 
-    await tx.waConversation.update({
-      where: { id: conversation.id },
-      data: { lastMessageAt: now },
-    });
+    const messages = [...messagesDesc].reverse();
 
-    await tx.waContact.update({
-      where: { id: conversation.contactId },
-      data: { lastMessageAt: now },
-    });
-
-    return created;
-  });
-
-  let providerMessageId: string | null = null;
-  let dispatched = false;
-  let dispatchError: string | null = null;
-
-  try {
-    const metaRes =
-      messageType === "text"
-        ? await sendMetaTextMessage({
-            phoneNumberId: conversation.account.phoneNumberId,
-            accessToken: conversation.account.accessToken,
-            to: conversation.contact.phone,
-            text,
-          })
-        : await sendMetaMediaMessage({
-            phoneNumberId: conversation.account.phoneNumberId,
-            accessToken: conversation.account.accessToken,
-            to: conversation.contact.phone,
-            mediaType: messageType,
-            link: mediaUrlForMeta,
-            caption: text || undefined,
-            filename: fileName || undefined,
-          });
-
-    providerMessageId = metaRes.messageId;
-    dispatched = true;
-
-    await prisma.waMessage.update({
-      where: { id: message.id },
-      data: {
-        status: "sent",
-        providerMessageId: providerMessageId || undefined,
-      },
-    });
-  } catch (err) {
-    dispatchError = err instanceof Error ? err.message : "Meta send failed";
-
-    await prisma.waMessage.update({
-      where: { id: message.id },
-      data: {
-        status: "failed",
-      },
-    });
-  }
-
-  await writeAuditLog({
-    tenantId: auth.tenantId,
-    actorUserId: auth.userId,
-    action: "tenant.whatsapp.message.send",
-    entity: "WaMessage",
-    entityId: message.id,
-    meta: {
-      conversationId: conversation.id,
-      messageType,
-      mediaUrl: mediaUrlForMeta || null,
-      dispatched,
-      providerMessageId,
-      dispatchError,
-    },
-    req,
-  });
-
-  if (!dispatched) {
+    return NextResponse.json({ success: true, messages });
+  } catch (error) {
+    console.error("GET /api/whatsapp/inbox/messages failed:", error);
     return NextResponse.json(
       {
         success: false,
-        error: dispatchError || "Failed to send message via Meta API",
-        messageId: message.id,
+        error: "Failed to load messages",
       },
-      { status: 502 }
+      { status: 500 }
     );
   }
+}
 
-  return NextResponse.json({
-    success: true,
-    message: {
-      ...message,
-      status: "sent",
-      providerMessageId,
-    },
-  });
+export async function POST(req: Request) {
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) {
+      return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!hasRoleAtLeast(auth.role, "member")) {
+      return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    const subscriptionBlocked = await ensureWhatsAppSubscriptionAccess(auth);
+    if (subscriptionBlocked) return subscriptionBlocked;
+
+    const body = await readJsonSafe(req);
+    if (!body) {
+      return NextResponse.json({ success: false, error: "Invalid JSON body" }, { status: 400 });
+    }
+
+    const conversationId = String(body.conversationId ?? "").trim();
+    const text = String(body.text ?? "").trim();
+    const rawMediaUrl = String(body.mediaUrl ?? "").trim();
+    const fileName = String(body.fileName ?? "").trim();
+    const messageType = normalizeMessageType(String(body.messageType ?? ""), rawMediaUrl);
+    const mediaUrlForMeta = normalizeMediaUrlForMeta(rawMediaUrl, req);
+
+    if (!conversationId) {
+      return NextResponse.json({ success: false, error: "conversationId is required" }, { status: 400 });
+    }
+
+    if (messageType === "text" && !text) {
+      return NextResponse.json(
+        { success: false, error: "text is required for text messages" },
+        { status: 400 }
+      );
+    }
+
+    if (messageType !== "text" && !mediaUrlForMeta) {
+      return NextResponse.json(
+        { success: false, error: "mediaUrl is required for media messages" },
+        { status: 400 }
+      );
+    }
+
+    const now = new Date();
+    const conversation = await prisma.waConversation.findFirst({
+      where: { id: conversationId, tenantId: auth.tenantId },
+      select: {
+        id: true,
+        accountId: true,
+        contactId: true,
+        contact: {
+          select: {
+            phone: true,
+          },
+        },
+        account: {
+          select: {
+            phoneNumberId: true,
+            accessToken: true,
+          },
+        },
+      },
+    });
+
+    if (!conversation) {
+      return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 });
+    }
+
+    if (!conversation.account.accessToken || !conversation.account.phoneNumberId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Account is missing Meta access token or phoneNumberId",
+        },
+        { status: 400 }
+      );
+    }
+
+    const message = await prisma.$transaction(async (tx) => {
+      const created = await tx.waMessage.create({
+        data: {
+          tenantId: auth.tenantId,
+          conversationId: conversation.id,
+          accountId: conversation.accountId,
+          direction: "outbound",
+          messageType,
+          text: text || null,
+          mediaUrl: mediaUrlForMeta || null,
+          status: "processing",
+          sentByUserId: auth.userId,
+        },
+        select: {
+          id: true,
+          direction: true,
+          messageType: true,
+          text: true,
+          mediaUrl: true,
+          status: true,
+          createdAt: true,
+          providerMessageId: true,
+        },
+      });
+
+      await tx.waConversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: now },
+      });
+
+      await tx.waContact.update({
+        where: { id: conversation.contactId },
+        data: { lastMessageAt: now },
+      });
+
+      return created;
+    });
+
+    let providerMessageId: string | null = null;
+    let dispatched = false;
+    let dispatchError: string | null = null;
+
+    try {
+      const metaRes =
+        messageType === "text"
+          ? await sendMetaTextMessage({
+              phoneNumberId: conversation.account.phoneNumberId,
+              accessToken: conversation.account.accessToken,
+              to: conversation.contact.phone,
+              text,
+            })
+          : await sendMetaMediaMessage({
+              phoneNumberId: conversation.account.phoneNumberId,
+              accessToken: conversation.account.accessToken,
+              to: conversation.contact.phone,
+              mediaType: messageType,
+              link: mediaUrlForMeta,
+              caption: text || undefined,
+              filename: fileName || undefined,
+            });
+
+      providerMessageId = metaRes.messageId;
+      dispatched = true;
+
+      await prisma.waMessage.update({
+        where: { id: message.id },
+        data: {
+          status: "sent",
+          providerMessageId: providerMessageId || undefined,
+        },
+      });
+    } catch (err) {
+      dispatchError = err instanceof Error ? err.message : "Meta send failed";
+
+      await prisma.waMessage.update({
+        where: { id: message.id },
+        data: {
+          status: "failed",
+        },
+      });
+    }
+
+    await writeAuditLog({
+      tenantId: auth.tenantId,
+      actorUserId: auth.userId,
+      action: "tenant.whatsapp.message.send",
+      entity: "WaMessage",
+      entityId: message.id,
+      meta: {
+        conversationId: conversation.id,
+        messageType,
+        mediaUrl: mediaUrlForMeta || null,
+        dispatched,
+        providerMessageId,
+        dispatchError,
+      },
+      req,
+    });
+
+    if (!dispatched) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: dispatchError || "Failed to send message via Meta API",
+          messageId: message.id,
+        },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: {
+        ...message,
+        status: "sent",
+        providerMessageId,
+      },
+    });
+  } catch (error) {
+    console.error("POST /api/whatsapp/inbox/messages failed:", error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to send message",
+      },
+      { status: 500 }
+    );
+  }
 }

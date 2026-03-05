@@ -26,7 +26,7 @@ type TenantNotification = {
 
 const LAST_READ_KEY = "vaiket.notifications.lastReadAt";
 const POPUP_ENABLED_KEY = "vaiket.notifications.popupEnabled";
-const POLL_INTERVAL_MS = 15000;
+const POLL_INTERVAL_MS = 30000;
 
 async function readJsonSafe(res: Response) {
   const text = await res.text();
@@ -88,6 +88,11 @@ function actionMeta(action: string) {
   };
 }
 
+function notificationsDigest(items: TenantNotification[]) {
+  if (items.length === 0) return "0";
+  return items.map((item) => `${item.id}|${item.createdAt}|${item.action}`).join("~");
+}
+
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -101,6 +106,9 @@ export default function NotificationBell() {
   const rootRef = useRef<HTMLDivElement>(null);
   const latestPopupTimeRef = useRef<number>(0);
   const firstFetchRef = useRef(true);
+  const inFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const digestRef = useRef("0");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -155,12 +163,27 @@ export default function NotificationBell() {
     }
   }, [items]);
 
-  const fetchNotifications = useCallback(async () => {
+  const fetchNotifications = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    const force = Boolean(opts?.force);
+
+    if (inFlightRef.current && !force) return;
+    if (force) {
+      abortRef.current?.abort();
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    inFlightRef.current = true;
+
     try {
-      setFetchError(null);
+      if (!silent) {
+        setFetchError(null);
+      }
       const res = await fetch("/api/tenant/notifications?take=30", {
         credentials: "include",
         cache: "no-store",
+        signal: controller.signal,
       });
       const data = await readJsonSafe(res);
 
@@ -169,7 +192,11 @@ export default function NotificationBell() {
       }
 
       const nextItems = (data.notifications || []) as TenantNotification[];
-      setItems(nextItems);
+      const nextDigest = notificationsDigest(nextItems);
+      if (nextDigest !== digestRef.current) {
+        digestRef.current = nextDigest;
+        setItems(nextItems);
+      }
 
       const latestCreatedAt = nextItems.reduce((max, item) => {
         const ts = new Date(item.createdAt).getTime();
@@ -207,23 +234,35 @@ export default function NotificationBell() {
         }
       }
     } catch (error) {
-      setFetchError(error instanceof Error ? error.message : "Failed to load notifications");
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      if (!silent) {
+        setFetchError(error instanceof Error ? error.message : "Failed to load notifications");
+      }
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        inFlightRef.current = false;
+        setLoading(false);
+      }
     }
   }, [popupEnabled]);
 
   useEffect(() => {
-    void fetchNotifications();
+    void fetchNotifications({ force: true });
 
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") {
-        void fetchNotifications();
+        void fetchNotifications({ silent: true });
       }
     }, POLL_INTERVAL_MS);
 
     return () => window.clearInterval(timer);
   }, [fetchNotifications]);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (open) markAllRead();
@@ -310,7 +349,7 @@ export default function NotificationBell() {
                 Mark all
               </button>
               <button
-                onClick={() => void fetchNotifications()}
+                onClick={() => void fetchNotifications({ force: true })}
                 className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
                 title="Refresh"
               >

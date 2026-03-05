@@ -144,11 +144,12 @@ export async function GET(req: Request) {
     console.error("GET /api/tenant/notifications failed:", error);
     return NextResponse.json(
       {
-        success: false,
-        error: "Failed to load notifications",
+        success: true,
+        notifications: [],
+        degraded: true,
+        error: "Notifications are temporarily unavailable",
       },
-      { status: 500 }
+      { status: 200 }
     );
   }
 }
-

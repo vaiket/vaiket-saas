@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -95,8 +95,11 @@ const QUICK_REPLIES = [
   "Got it. I will connect you to support.",
 ];
 const VOICE_WAVE_HEIGHTS = [8, 10, 12, 9, 16, 10, 12, 8, 14, 9, 11, 8, 15, 10, 12, 9, 13, 8, 12, 9, 14, 10, 11, 8];
-const POLL_INTERVAL_MS = 8000;
-const MESSAGES_FETCH_LIMIT = 180;
+const CONVERSATIONS_POLL_INTERVAL_MS = 12000;
+const MESSAGES_POLL_INTERVAL_MS = 10000;
+const INITIAL_MESSAGES_FETCH_LIMIT = 20;
+const MESSAGES_FETCH_BATCH_SIZE = 20;
+const MAX_MESSAGES_FETCH_LIMIT = 200;
 const LOCAL_CACHE_PREFIX = "vaiket_wa_inbox_v2";
 
 type ConversationsCache = {
@@ -325,6 +328,53 @@ function OutboundStatus({ status }: { status: string }) {
   return <Clock3 className={`h-3.5 w-3.5 ${statusIconColor(status)}`} />;
 }
 
+type ConversationListItemProps = {
+  item: Conversation;
+  active: boolean;
+  onSelect: (id: string) => void;
+};
+
+const ConversationListItem = memo(function ConversationListItem({
+  item,
+  active,
+  onSelect,
+}: ConversationListItemProps) {
+  return (
+    <button
+      onClick={() => onSelect(item.id)}
+      className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+        active
+          ? "border-emerald-300 bg-emerald-50"
+          : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
+            {initials(item.contact.name, item.contact.phone)}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">
+              {item.contact.name || item.contact.phone}
+            </p>
+            <p className="truncate text-xs text-slate-500">{item.contact.phone}</p>
+          </div>
+        </div>
+        <p className="shrink-0 text-[11px] text-slate-500">{formatChatTime(item.lastMessageAt)}</p>
+      </div>
+      <p className="mt-1 truncate text-xs text-slate-600">{conversationPreview(item)}</p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${conversationStatusClass(item.status)}`}>
+          {item.status}
+        </span>
+        <span className="truncate text-[10px] text-slate-500">
+          {item.account.name} ({item.account.phoneNumber})
+        </span>
+      </div>
+    </button>
+  );
+});
+
 export default function WhatsAppInboxPage() {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("all");
@@ -336,6 +386,7 @@ export default function WhatsAppInboxPage() {
   const [mobileView, setMobileView] = useState<MobileView>("list");
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -370,10 +421,14 @@ export default function WhatsAppInboxPage() {
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const previousConversationIdRef = useRef("");
+  const selectedConversationIdRef = useRef("");
   const conversationDigestRef = useRef("");
   const messagesDigestRef = useRef("");
   const conversationsAbortRef = useRef<AbortController | null>(null);
   const messagesAbortRef = useRef<AbortController | null>(null);
+  const conversationsRequestInFlightRef = useRef(false);
+  const messagesRequestInFlightRef = useRef(false);
+  const messagesFetchLimitRef = useRef(INITIAL_MESSAGES_FETCH_LIMIT);
   const hydratedAccountCacheRef = useRef(new Set<string>());
 
   const clearPendingAttachment = useCallback(() => {
@@ -443,11 +498,20 @@ export default function WhatsAppInboxPage() {
   }, []);
 
   const loadConversations = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (opts?: { silent?: boolean; force?: boolean }) => {
       const silent = Boolean(opts?.silent);
+      const force = Boolean(opts?.force);
+
+      if (conversationsRequestInFlightRef.current && !force) return;
+
+      if (force) {
+        conversationsAbortRef.current?.abort();
+      }
+
       const controller = new AbortController();
-      conversationsAbortRef.current?.abort();
       conversationsAbortRef.current = controller;
+      conversationsRequestInFlightRef.current = true;
+
       try {
         if (!silent) {
           setLoadingConversations(true);
@@ -465,19 +529,18 @@ export default function WhatsAppInboxPage() {
         if (!res.ok || !data.success) throw new Error(data.error || "Failed to load conversations");
         const next = (data.conversations || []) as Conversation[];
         const digest = buildConversationsDigest(next);
+        const activeConversationId = selectedConversationIdRef.current;
         const nextSelectedConversationId =
-          next.length === 0
-            ? ""
-            : selectedConversationId && next.some((item) => item.id === selectedConversationId)
-              ? selectedConversationId
-              : next[0].id;
+          activeConversationId && next.some((item) => item.id === activeConversationId)
+            ? activeConversationId
+            : "";
 
         if (digest !== conversationDigestRef.current) {
           conversationDigestRef.current = digest;
           setConversations(next);
         }
 
-        if (nextSelectedConversationId !== selectedConversationId) {
+        if (nextSelectedConversationId !== activeConversationId) {
           setSelectedConversationId(nextSelectedConversationId);
         }
 
@@ -496,58 +559,79 @@ export default function WhatsAppInboxPage() {
         if (err instanceof DOMException && err.name === "AbortError") return;
         if (!silent) setError(err instanceof Error ? err.message : "Failed to load conversations");
       } finally {
-        if (!silent && conversationsAbortRef.current === controller) {
+        if (conversationsAbortRef.current === controller) {
+          conversationsRequestInFlightRef.current = false;
           setLoadingConversations(false);
         }
       }
     },
-    [selectedAccountId, selectedConversationId]
+    [selectedAccountId]
   );
 
-  const loadMessages = useCallback(async (conversationId: string, opts?: { silent?: boolean }) => {
-    const silent = Boolean(opts?.silent);
-    const controller = new AbortController();
-    messagesAbortRef.current?.abort();
-    messagesAbortRef.current = controller;
-    try {
+  const loadMessages = useCallback(
+    async (conversationId: string, opts?: { silent?: boolean; force?: boolean; limit?: number }) => {
+      const silent = Boolean(opts?.silent);
+      const force = Boolean(opts?.force);
+      const requestedLimit = Number(opts?.limit || messagesFetchLimitRef.current);
+      const limit = Math.max(20, Math.min(Math.floor(requestedLimit), MAX_MESSAGES_FETCH_LIMIT));
+
       if (!conversationId) return;
-      if (!silent) {
-        setLoadingMessages(true);
-        setError(null);
+      if (messagesRequestInFlightRef.current && !force) return;
+
+      if (force) {
+        messagesAbortRef.current?.abort();
       }
-      const endpoint = `/api/whatsapp/inbox/messages?conversationId=${encodeURIComponent(conversationId)}&limit=${MESSAGES_FETCH_LIMIT}`;
-      const res = await fetch(endpoint, {
-        credentials: "include",
-        cache: "no-store",
-        signal: controller.signal,
-      });
-      const data = await readJsonSafe(res);
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to load messages");
-      const next = (data.messages || []) as Message[];
-      const digest = buildMessagesDigest(next);
-      if (digest !== messagesDigestRef.current) {
-        messagesDigestRef.current = digest;
-        setMessages(next);
-      }
+
+      const controller = new AbortController();
+      messagesAbortRef.current = controller;
+      messagesRequestInFlightRef.current = true;
+      messagesFetchLimitRef.current = limit;
+
       try {
-        const cachePayload: MessagesCache = {
-          conversationId,
-          messages: next,
-          updatedAt: Date.now(),
-        };
-        localStorage.setItem(messagesCacheKey(conversationId), JSON.stringify(cachePayload));
-      } catch {
-        // ignore cache write failures
+        if (!silent) {
+          setLoadingMessages(true);
+          setError(null);
+        }
+        const endpoint = `/api/whatsapp/inbox/messages?conversationId=${encodeURIComponent(conversationId)}&limit=${limit}`;
+        const res = await fetch(endpoint, {
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const data = await readJsonSafe(res);
+        if (!res.ok || !data.success) throw new Error(data.error || "Failed to load messages");
+        const next = (data.messages || []) as Message[];
+        const digest = buildMessagesDigest(next);
+        if (digest !== messagesDigestRef.current) {
+          messagesDigestRef.current = digest;
+          setMessages(next);
+        }
+        try {
+          const cachePayload: MessagesCache = {
+            conversationId,
+            messages: next,
+            updatedAt: Date.now(),
+          };
+          localStorage.setItem(messagesCacheKey(conversationId), JSON.stringify(cachePayload));
+        } catch {
+          // ignore cache write failures
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!silent) setError(err instanceof Error ? err.message : "Failed to load messages");
+      } finally {
+        if (messagesAbortRef.current === controller) {
+          messagesRequestInFlightRef.current = false;
+          setLoadingMessages(false);
+        }
       }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      if (!silent) setError(err instanceof Error ? err.message : "Failed to load messages");
-    } finally {
-      if (!silent && messagesAbortRef.current === controller) {
-        setLoadingMessages(false);
-      }
-    }
-  }, []);
+    },
+    []
+  );
+
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
 
   useEffect(() => {
     try {
@@ -583,7 +667,7 @@ export default function WhatsAppInboxPage() {
       if (!cached || cached.accountId !== selectedAccountId || cached.conversations.length === 0) return;
       conversationDigestRef.current = buildConversationsDigest(cached.conversations);
       setConversations(cached.conversations);
-      setSelectedConversationId((prev) => prev || cached.selectedConversationId || cached.conversations[0]?.id || "");
+      setSelectedConversationId((prev) => prev || cached.selectedConversationId || "");
       setLoadingConversations(false);
     } catch {
       // ignore cache read failures
@@ -602,28 +686,37 @@ export default function WhatsAppInboxPage() {
   }, [loadAccounts]);
 
   useEffect(() => {
-    void loadConversations();
+    void loadConversations({ force: true });
   }, [loadConversations]);
 
   useEffect(() => {
     if (!selectedConversationId) {
       setMessages([]);
       messagesDigestRef.current = "0";
+      messagesFetchLimitRef.current = INITIAL_MESSAGES_FETCH_LIMIT;
       return;
     }
+    messagesFetchLimitRef.current = INITIAL_MESSAGES_FETCH_LIMIT;
+    let hasCachedMessages = false;
     try {
       const cached = safeParseJson<MessagesCache>(
         localStorage.getItem(messagesCacheKey(selectedConversationId))
       );
       if (cached?.conversationId === selectedConversationId && cached.messages.length > 0) {
-        messagesDigestRef.current = buildMessagesDigest(cached.messages);
-        setMessages(cached.messages);
+        const cachedInitialMessages = cached.messages.slice(-INITIAL_MESSAGES_FETCH_LIMIT);
+        messagesDigestRef.current = buildMessagesDigest(cachedInitialMessages);
+        setMessages(cachedInitialMessages);
         setLoadingMessages(false);
+        hasCachedMessages = true;
       }
     } catch {
       // ignore cache read failures
     }
-    void loadMessages(selectedConversationId);
+    void loadMessages(selectedConversationId, {
+      silent: hasCachedMessages,
+      force: true,
+      limit: INITIAL_MESSAGES_FETCH_LIMIT,
+    });
   }, [selectedConversationId, loadMessages]);
 
   useEffect(() => {
@@ -660,7 +753,10 @@ export default function WhatsAppInboxPage() {
 
   useEffect(() => {
     if (!isPageVisible) return;
-    const timer = window.setInterval(() => void loadConversations({ silent: true }), POLL_INTERVAL_MS);
+    const timer = window.setInterval(
+      () => void loadConversations({ silent: true }),
+      CONVERSATIONS_POLL_INTERVAL_MS
+    );
     return () => window.clearInterval(timer);
   }, [loadConversations, isPageVisible]);
 
@@ -668,10 +764,18 @@ export default function WhatsAppInboxPage() {
     if (!selectedConversationId || !isPageVisible) return;
     const timer = window.setInterval(
       () => void loadMessages(selectedConversationId, { silent: true }),
-      POLL_INTERVAL_MS
+      MESSAGES_POLL_INTERVAL_MS
     );
     return () => window.clearInterval(timer);
   }, [selectedConversationId, loadMessages, isPageVisible]);
+
+  useEffect(() => {
+    if (!isPageVisible) return;
+    void loadConversations({ silent: true });
+    if (selectedConversationIdRef.current) {
+      void loadMessages(selectedConversationIdRef.current, { silent: true });
+    }
+  }, [isPageVisible, loadConversations, loadMessages]);
 
   useEffect(() => {
     if (!selectedConversation || !isPageVisible || selectedConversation.status.trim().toLowerCase() !== "active") return;
@@ -718,12 +822,48 @@ export default function WhatsAppInboxPage() {
     };
   }, []);
 
+  const loadMoreMessages = useCallback(async () => {
+    if (!selectedConversationIdRef.current) return;
+    if (loadingMessages || messagesRequestInFlightRef.current) return;
+
+    const currentLimit = messagesFetchLimitRef.current;
+    if (messages.length < currentLimit) return;
+
+    const nextLimit = Math.min(currentLimit + MESSAGES_FETCH_BATCH_SIZE, MAX_MESSAGES_FETCH_LIMIT);
+    if (nextLimit === currentLimit) return;
+
+    const el = messageScrollRef.current;
+    const previousScrollHeight = el?.scrollHeight || 0;
+    const previousScrollTop = el?.scrollTop || 0;
+    messagesFetchLimitRef.current = nextLimit;
+    setLoadingOlderMessages(true);
+    try {
+      await loadMessages(selectedConversationIdRef.current, {
+        silent: true,
+        force: true,
+        limit: nextLimit,
+      });
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+
+    if (el) {
+      window.requestAnimationFrame(() => {
+        const nextScrollHeight = el.scrollHeight;
+        el.scrollTop = Math.max(0, nextScrollHeight - previousScrollHeight + previousScrollTop);
+      });
+    }
+  }, [loadMessages, loadingMessages, messages.length]);
+
   const onMessagesScroll = useCallback(() => {
     if (!messageScrollRef.current) return;
     const el = messageScrollRef.current;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     shouldStickToBottomRef.current = distanceFromBottom < 96;
-  }, []);
+    if (el.scrollTop <= 32) {
+      void loadMoreMessages();
+    }
+  }, [loadMoreMessages]);
 
   const onSend = async () => {
     try {
@@ -781,7 +921,10 @@ export default function WhatsAppInboxPage() {
       setShowEmojiPicker(false);
       setShowTemplateMenu(false);
       setShowQuickReplies(false);
-      await Promise.all([loadMessages(selectedConversationId), loadConversations()]);
+      await Promise.all([
+        loadMessages(selectedConversationId, { force: true }),
+        loadConversations({ force: true }),
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed");
     } finally {
@@ -813,7 +956,7 @@ export default function WhatsAppInboxPage() {
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to save contact details");
       setContactForm(toContactForm(data.contact as Conversation["contact"]));
       setContactMessage("Contact details updated.");
-      await loadConversations();
+      await loadConversations({ force: true });
     } catch (err) {
       setContactError(err instanceof Error ? err.message : "Contact save failed");
     } finally {
@@ -945,22 +1088,33 @@ export default function WhatsAppInboxPage() {
     }
   };
 
-  const selectConversation = (id: string) => {
-    clearPendingAttachment();
-    shouldStickToBottomRef.current = true;
-    setSelectedConversationId(id);
-    setMobileView("chat");
-    setShowChatMenu(false);
-    setShowAutomationMenu(false);
-    setShowEmojiPicker(false);
-    setShowTemplateMenu(false);
-    setShowQuickReplies(false);
-    setReplyToId(null);
-    setChatSearch("");
-    setHiddenMessageIds([]);
-    setReactionsMap({});
-    setChatNotice(null);
-  };
+  const selectConversation = useCallback(
+    (id: string) => {
+      clearPendingAttachment();
+      shouldStickToBottomRef.current = true;
+      setMobileView("chat");
+      setShowChatMenu(false);
+      setShowAutomationMenu(false);
+      setShowEmojiPicker(false);
+      setShowTemplateMenu(false);
+      setShowQuickReplies(false);
+      setReplyToId(null);
+      setChatSearch("");
+      setHiddenMessageIds([]);
+      setReactionsMap({});
+      setChatNotice(null);
+
+      if (id === selectedConversationIdRef.current) return;
+
+      messagesAbortRef.current?.abort();
+      messagesRequestInFlightRef.current = false;
+      messagesFetchLimitRef.current = INITIAL_MESSAGES_FETCH_LIMIT;
+      setMessages([]);
+      messagesDigestRef.current = "0";
+      setSelectedConversationId(id);
+    },
+    [clearPendingAttachment]
+  );
 
   return (
     <div className="mx-auto max-w-[1600px] space-y-4">
@@ -968,7 +1122,7 @@ export default function WhatsAppInboxPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">WhatsApp Inbox</h1>
-            <p className="mt-1 text-sm text-slate-600">Shared inbox with live sync every 8 seconds.</p>
+            <p className="mt-1 text-sm text-slate-600">Shared inbox with guarded live sync and instant chat switching.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -993,7 +1147,7 @@ export default function WhatsAppInboxPage() {
             </select>
             <button
               type="button"
-              onClick={() => void loadConversations()}
+              onClick={() => void loadConversations({ force: true })}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               <RefreshCcw className="h-4 w-4" />
@@ -1063,41 +1217,13 @@ export default function WhatsAppInboxPage() {
               </p>
             ) : (
               filteredConversations.map((item) => {
-                const active = selectedConversationId === item.id;
                 return (
-                  <button
+                  <ConversationListItem
                     key={item.id}
-                    onClick={() => selectConversation(item.id)}
-                    className={`w-full rounded-xl border px-3 py-2 text-left transition ${
-                      active
-                        ? "border-emerald-300 bg-emerald-50"
-                        : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
-                          {initials(item.contact.name, item.contact.phone)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">
-                            {item.contact.name || item.contact.phone}
-                          </p>
-                          <p className="truncate text-xs text-slate-500">{item.contact.phone}</p>
-                        </div>
-                      </div>
-                      <p className="shrink-0 text-[11px] text-slate-500">{formatChatTime(item.lastMessageAt)}</p>
-                    </div>
-                    <p className="mt-1 truncate text-xs text-slate-600">{conversationPreview(item)}</p>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${conversationStatusClass(item.status)}`}>
-                        {item.status}
-                      </span>
-                      <span className="truncate text-[10px] text-slate-500">
-                        {item.account.name} ({item.account.phoneNumber})
-                      </span>
-                    </div>
-                  </button>
+                    item={item}
+                    active={selectedConversationId === item.id}
+                    onSelect={selectConversation}
+                  />
                 );
               })
             )}
@@ -1231,6 +1357,14 @@ export default function WhatsAppInboxPage() {
                     <p className="text-sm text-slate-500">No messages in this conversation.</p>
                   ) : (
                     <div className="space-y-2">
+                      {loadingOlderMessages ? (
+                        <div className="flex justify-center py-1">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Loading older messages...
+                          </span>
+                        </div>
+                      ) : null}
                       {chatRows.map((row) => {
                         if (row.kind === "separator") {
                           return (
