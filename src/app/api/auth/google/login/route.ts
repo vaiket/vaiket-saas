@@ -1,6 +1,10 @@
 // src/app/api/auth/google/login/route.ts
 import { NextResponse } from "next/server";
-import { getGoogleRedirectUri } from "@/lib/url/public-base";
+import {
+  getGoogleOAuthClientConfig,
+  getGoogleRedirectUri,
+  getPublicBaseUrl,
+} from "@/lib/url/public-base";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -9,7 +13,12 @@ export async function GET(req: Request) {
   const intentParam = url.searchParams.get("intent");
   const intent = intentParam === "signup" ? "signup" : "login";
 
-  const clientId = process.env.GOOGLE_CLIENT_ID!;
+  const appBaseUrl = getPublicBaseUrl(req);
+  const { clientId } = getGoogleOAuthClientConfig(req);
+  if (!clientId) {
+    return NextResponse.redirect(new URL("/login?error=google_config", appBaseUrl));
+  }
+
   const redirectUri = getGoogleRedirectUri(req);
 
   // Keep login/signup on standard profile scopes; Gmail scope only when explicitly connecting mailbox.

@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { getGoogleRedirectUri, getPublicBaseUrl, isLocalHostLike } from "@/lib/url/public-base";
+import {
+  getGoogleOAuthClientConfig,
+  getGoogleRedirectUri,
+  getPublicBaseUrl,
+  isLocalHostLike,
+} from "@/lib/url/public-base";
 
 type OAuthState = {
   intent?: "login" | "signup";
@@ -85,11 +90,18 @@ export async function GET(req: Request) {
     }
 
     const redirectUri = resolveGoogleRedirectUri(req, state);
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    const { clientId, clientSecret, preferProd } = getGoogleOAuthClientConfig(req);
     const jwtSecret = process.env.JWT_SECRET;
 
     if (!redirectUri || !clientId || !clientSecret || !jwtSecret) {
+      console.error("[google/callback] Missing OAuth configuration", {
+        host: new URL(req.url).host,
+        preferProd,
+        hasRedirectUri: Boolean(redirectUri),
+        hasClientId: Boolean(clientId),
+        hasClientSecret: Boolean(clientSecret),
+        hasJwtSecret: Boolean(jwtSecret),
+      });
       return NextResponse.redirect(new URL("/login?error=google_config", appBaseUrl));
     }
 

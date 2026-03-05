@@ -134,3 +134,40 @@ export function getGoogleRedirectUri(req: Request) {
   return `${getPublicBaseUrl(req)}/api/auth/google/callback`;
 }
 
+function pickGoogleCredential(
+  preferProd: boolean,
+  prodValue: string,
+  sharedValue: string,
+  localValue: string
+) {
+  if (preferProd) {
+    return prodValue || sharedValue || localValue;
+  }
+
+  return localValue || sharedValue || prodValue;
+}
+
+export function getGoogleOAuthClientConfig(req: Request) {
+  const requestHostIsLocal = isLocalHostLike(new URL(req.url).host);
+  const preferProd = process.env.NODE_ENV === "production" || !requestHostIsLocal;
+
+  const clientId = pickGoogleCredential(
+    preferProd,
+    readText(process.env.GOOGLE_CLIENT_ID_PROD),
+    readText(process.env.GOOGLE_CLIENT_ID),
+    readText(process.env.GOOGLE_CLIENT_ID_LOCAL)
+  );
+
+  const clientSecret = pickGoogleCredential(
+    preferProd,
+    readText(process.env.GOOGLE_CLIENT_SECRET_PROD),
+    readText(process.env.GOOGLE_CLIENT_SECRET),
+    readText(process.env.GOOGLE_CLIENT_SECRET_LOCAL)
+  );
+
+  return {
+    clientId,
+    clientSecret,
+    preferProd,
+  };
+}
