@@ -76,6 +76,8 @@ type FailureEntry = {
 
 type DispatchMode = "instant" | "scheduled" | "recurring";
 type VariableSource = "csv_column" | "fixed";
+type BuilderMode = "simple" | "advanced";
+type AudienceTab = "manual" | "csv" | "contacts";
 
 type CsvRecipient = {
   phone: string;
@@ -183,6 +185,8 @@ export default function WhatsAppSendMessagesPage() {
   const [templateLanguage, setTemplateLanguage] = useState("en_US");
   const [numbersText, setNumbersText] = useState("");
   const [dispatchMode, setDispatchMode] = useState<DispatchMode>("instant");
+  const [builderMode, setBuilderMode] = useState<BuilderMode>("simple");
+  const [audienceTab, setAudienceTab] = useState<AudienceTab>("manual");
   const [scheduleAt, setScheduleAt] = useState("");
   const [recurringRule, setRecurringRule] = useState("FREQ=DAILY");
   const [loading, setLoading] = useState(true);
@@ -615,6 +619,8 @@ export default function WhatsAppSendMessagesPage() {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const draftDispatchMode = asString(parsed.dispatchMode);
+      const draftBuilderMode = asString(parsed.builderMode);
+      const draftAudienceTab = asString(parsed.audienceTab);
       setNumbersText(asString(parsed.numbersText));
       setCustomTemplateKey(asString(parsed.customTemplateKey));
       setTemplateLanguage(asString(parsed.templateLanguage) || "en_US");
@@ -622,6 +628,10 @@ export default function WhatsAppSendMessagesPage() {
         draftDispatchMode === "scheduled" || draftDispatchMode === "recurring"
           ? draftDispatchMode
           : "instant"
+      );
+      setBuilderMode(draftBuilderMode === "advanced" ? "advanced" : "simple");
+      setAudienceTab(
+        draftAudienceTab === "csv" || draftAudienceTab === "contacts" ? draftAudienceTab : "manual"
       );
       setScheduleAt(asString(parsed.scheduleAt));
       setRecurringRule(asString(parsed.recurringRule) || "FREQ=DAILY");
@@ -646,6 +656,8 @@ export default function WhatsAppSendMessagesPage() {
       customTemplateKey,
       templateLanguage,
       dispatchMode,
+      builderMode,
+      audienceTab,
       scheduleAt,
       recurringRule,
       csvPhoneColumn,
@@ -658,6 +670,8 @@ export default function WhatsAppSendMessagesPage() {
     customTemplateKey,
     templateLanguage,
     dispatchMode,
+    builderMode,
+    audienceTab,
     scheduleAt,
     recurringRule,
     csvPhoneColumn,
@@ -997,6 +1011,7 @@ export default function WhatsAppSendMessagesPage() {
     : selectedTemplateOption?.source === "meta"
       ? "Synced"
       : "Default";
+  const simpleMode = builderMode === "simple";
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-5">
@@ -1018,6 +1033,35 @@ export default function WhatsAppSendMessagesPage() {
                 Dashboard
               </Link>{" "}
               / WhatsApp Hub / Send Messages
+            </p>
+            <div className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white p-1">
+              <button
+                type="button"
+                onClick={() => setBuilderMode("simple")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  builderMode === "simple"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Simple Mode
+              </button>
+              <button
+                type="button"
+                onClick={() => setBuilderMode("advanced")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                  builderMode === "advanced"
+                    ? "bg-indigo-600 text-white"
+                    : "text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                Advanced Mode
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              {builderMode === "simple"
+                ? "Simple mode shows only essential controls for faster sending."
+                : "Advanced mode unlocks CSV mapping, filters and full campaign controls."}
             </p>
           </div>
           <div className="grid w-full grid-cols-2 gap-2 sm:max-w-[560px] sm:grid-cols-3">
@@ -1053,6 +1097,19 @@ export default function WhatsAppSendMessagesPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          "1. Pick device + template",
+          "2. Add audience (manual/CSV/contacts)",
+          "3. Set instant or schedule",
+          "4. Review and send",
+        ].map((step) => (
+          <div key={step} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+            {step}
+          </div>
+        ))}
       </section>
 
       {(message || error) && (
@@ -1170,59 +1227,66 @@ export default function WhatsAppSendMessagesPage() {
                   </label>
                 </div>
 
-                <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-3">
-                  <label className="space-y-1">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      <Search className="h-3.5 w-3.5" />
-                      Template Search
-                    </span>
-                    <input
-                      value={templateSearch}
-                      onChange={(e) => setTemplateSearch(e.target.value)}
-                      placeholder="search name/language"
-                      className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      <Filter className="h-3.5 w-3.5" />
-                      Status
-                    </span>
-                    <select
-                      value={templateStatusFilter}
-                      onChange={(e) => setTemplateStatusFilter(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    >
-                      <option value="all">All</option>
-                      {templateStatuses.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="space-y-1">
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                      <Filter className="h-3.5 w-3.5" />
-                      Category
-                    </span>
-                    <select
-                      value={templateCategoryFilter}
-                      onChange={(e) => setTemplateCategoryFilter(e.target.value)}
-                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-                    >
-                      <option value="all">All</option>
-                      {templateCategories.map((category) => (
-                        <option key={category} value={category}>
-                          {category}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-600">
-                    Showing {filteredTemplateOptions.length} template options from {templateOptions.length} total.
+                {simpleMode ? (
+                  <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                    {filteredTemplateOptions.length} templates available. Switch to{" "}
+                    <span className="font-semibold text-slate-800">Advanced Mode</span> to apply search and status filters.
                   </div>
-                </div>
+                ) : (
+                  <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-3">
+                    <label className="space-y-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <Search className="h-3.5 w-3.5" />
+                        Template Search
+                      </span>
+                      <input
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        placeholder="search name/language"
+                        className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      />
+                    </label>
+                    <label className="space-y-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <Filter className="h-3.5 w-3.5" />
+                        Status
+                      </span>
+                      <select
+                        value={templateStatusFilter}
+                        onChange={(e) => setTemplateStatusFilter(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      >
+                        <option value="all">All</option>
+                        {templateStatuses.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <Filter className="h-3.5 w-3.5" />
+                        Category
+                      </span>
+                      <select
+                        value={templateCategoryFilter}
+                        onChange={(e) => setTemplateCategoryFilter(e.target.value)}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      >
+                        <option value="all">All</option>
+                        {templateCategories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-600">
+                      Showing {filteredTemplateOptions.length} template options from {templateOptions.length} total.
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
                   <span>
@@ -1274,7 +1338,52 @@ export default function WhatsAppSendMessagesPage() {
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 p-4 md:p-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+                <p className="mb-2 text-sm font-semibold text-slate-900">Audience Source</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => setAudienceTab("manual")}
+                    className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+                      audienceTab === "manual"
+                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    Manual Numbers
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAudienceTab("csv")}
+                    className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+                      audienceTab === "csv"
+                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    CSV Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAudienceTab("contacts")}
+                    className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
+                      audienceTab === "contacts"
+                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    Contact List
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-600">
+                  {simpleMode
+                    ? "Simple mode shows only the selected audience source."
+                    : "Advanced mode keeps all audience tools visible together."}
+                </p>
+              </div>
+
+              {!simpleMode || audienceTab !== "contacts" ? (
+                <div className="rounded-2xl border border-slate-200 p-4 md:p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <Hash className="h-4 w-4 text-indigo-600" />
@@ -1298,7 +1407,8 @@ export default function WhatsAppSendMessagesPage() {
                   </div>
                 </div>
 
-                <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:p-4">
+                {!simpleMode || audienceTab === "csv" ? (
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">CSV Audience Upload</p>
@@ -1378,9 +1488,11 @@ export default function WhatsAppSendMessagesPage() {
                     </span>
                     <span className="rounded-full bg-white px-2 py-1">Columns: {csvColumns.length}</span>
                   </div>
-                </div>
+                  </div>
+                ) : null}
 
-                <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+                {!simpleMode || audienceTab === "csv" ? (
+                  <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Template Variable Mapping</p>
@@ -1494,8 +1606,11 @@ export default function WhatsAppSendMessagesPage() {
                       )}
                     </div>
                   ) : null}
-                </div>
+                  </div>
+                ) : null}
 
+                {!simpleMode || audienceTab === "manual" ? (
+                  <>
                 <textarea
                   value={numbersText}
                   onChange={(e) => setNumbersText(e.target.value)}
@@ -1523,9 +1638,17 @@ export default function WhatsAppSendMessagesPage() {
                     </>
                   ) : null}
                 </div>
-              </div>
+                  </>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                    Manual numbers are hidden in simple mode. Open <span className="font-semibold">Manual Numbers</span> tab to edit.
+                  </p>
+                )}
+                </div>
+              ) : null}
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
+              {!simpleMode || audienceTab === "contacts" ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
                     <Users className="h-4 w-4 text-indigo-600" />
@@ -1643,7 +1766,8 @@ export default function WhatsAppSendMessagesPage() {
                     })
                   )}
                 </div>
-              </div>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-2 md:p-5">
                 <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
