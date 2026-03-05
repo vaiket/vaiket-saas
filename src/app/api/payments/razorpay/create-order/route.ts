@@ -30,7 +30,7 @@ type TrialAutopayCreateResult = {
 };
 
 const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
-const TRIAL_AUTOPAY_TRIAL_DAYS = 7;
+const TRIAL_AUTOPAY_TRIAL_DAYS = 30;
 const TRIAL_AUTOPAY_CHARGE_INR = 2;
 const TRIAL_AUTOPAY_RECURRING_INR = 999;
 const TRIAL_AUTOPAY_TOTAL_COUNT = 120;
@@ -76,7 +76,7 @@ async function createTrialAutopayPlan(authHeader: string) {
         name: "WhatsApp Starter Monthly 999",
         amount: TRIAL_AUTOPAY_RECURRING_INR * 100,
         currency: "INR",
-        description: "Autopay recurring amount after 7-day trial",
+        description: `Autopay recurring amount after ${TRIAL_AUTOPAY_TRIAL_DAYS}-day trial`,
       },
       notes: {
         source: "vaiket_autopay_trial",

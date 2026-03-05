@@ -106,7 +106,7 @@ const PRODUCT_CONFIG: Record<
 
 let razorpayScriptPromise: Promise<boolean> | null = null;
 const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
-const DEFAULT_TRIAL_DAYS = 7;
+const DEFAULT_TRIAL_DAYS = 30;
 const DEFAULT_RECURRING_INR = 999;
 
 function loadRazorpayScript(): Promise<boolean> {
@@ -314,7 +314,7 @@ export default function SubscriptionWorkspace({
             key: data.keyId,
             subscription_id: data.autopaySubscriptionId,
             name: "Vaiket Bridge",
-            description: "7-day trial (INR 2 refundable)",
+            description: `${data.trialDays ?? DEFAULT_TRIAL_DAYS}-day trial (INR 2 refundable)`,
             prefill: {
               name: data.customer?.name || "",
               email: data.customer?.email || "",
@@ -555,7 +555,7 @@ export default function SubscriptionWorkspace({
             billingCycle === "monthly";
           const displayFeatures = isTrialAutopayCard
             ? [
-                "7-day free trial access",
+                `${DEFAULT_TRIAL_DAYS}-day free trial access`,
                 "INR 2 trial authorization (auto-refunded)",
                 "Autopay starts at INR 999/month after trial",
                 ...(features.length ? features : []),
@@ -588,7 +588,7 @@ export default function SubscriptionWorkspace({
               <div className="mt-4">
                 {isTrialAutopayCard ? (
                   <>
-                    <p className="text-3xl font-bold text-slate-900">7-Day Free Trial</p>
+                    <p className="text-3xl font-bold text-slate-900">{DEFAULT_TRIAL_DAYS}-Day Free Trial</p>
                     <p className="text-xs text-slate-500">
                       INR 2 auth (auto-refund) - then INR 999/month autopay
                     </p>
@@ -726,7 +726,7 @@ export default function SubscriptionWorkspace({
             </li>
             <li className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
               {product === "whatsapp"
-                ? "WhatsApp Starter monthly supports: 7-day trial + INR 2 auto-refund + INR 999/month Razorpay autopay."
+                ? `WhatsApp Starter monthly supports: ${DEFAULT_TRIAL_DAYS}-day trial + INR 2 auto-refund + INR 999/month Razorpay autopay.`
                 : "Email Hub APIs check active `core_*` subscription before allowing actions."}
             </li>
           </ul>

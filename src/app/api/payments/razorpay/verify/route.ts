@@ -23,7 +23,7 @@ type RazorpayRefundResponse = {
 };
 
 const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
-const TRIAL_AUTOPAY_TRIAL_DAYS = 7;
+const TRIAL_AUTOPAY_TRIAL_DAYS = 30;
 const TRIAL_AUTOPAY_CHARGE_INR = 2;
 const TRIAL_AUTOPAY_RECURRING_INR = 999;
 
@@ -123,7 +123,7 @@ async function tryRefundTrialCharge(params: {
         speed: "normal",
         notes: {
           localSubscriptionId: String(params.localSubscriptionId),
-          reason: "7_day_trial_refund",
+          reason: `${TRIAL_AUTOPAY_TRIAL_DAYS}_day_trial_refund`,
         },
       }),
       cache: "no-store",
