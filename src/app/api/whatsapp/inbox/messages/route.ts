@@ -3,14 +3,21 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { getAuthContext, hasRoleAtLeast } from "@/lib/auth/session";
-import { sendMetaTextMessage } from "@/lib/whatsapp/meta";
+import { getPublicBaseUrl } from "@/lib/url/public-base";
+import { sendMetaMediaMessage, sendMetaTextMessage } from "@/lib/whatsapp/meta";
 import { ensureWhatsAppSubscriptionAccess } from "@/lib/subscriptions/whatsapp-gate";
 
 type SendMessageBody = {
   conversationId?: unknown;
   text?: unknown;
   messageType?: unknown;
+  mediaUrl?: unknown;
+  fileName?: unknown;
 };
+
+type SupportedMessageType = "text" | "image" | "video" | "audio" | "document";
+const DEFAULT_FETCH_LIMIT = 180;
+const MAX_FETCH_LIMIT = 500;
 
 async function readJsonSafe(req: Request): Promise<SendMessageBody | null> {
   try {
@@ -18,6 +25,43 @@ async function readJsonSafe(req: Request): Promise<SendMessageBody | null> {
   } catch {
     return null;
   }
+}
+
+function readBoundedInt(value: string | null, fallback: number, min: number, max: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const rounded = Math.floor(parsed);
+  if (rounded < min) return min;
+  if (rounded > max) return max;
+  return rounded;
+}
+
+function inferMediaTypeFromUrl(value: string): Exclude<SupportedMessageType, "text"> {
+  const normalized = value.toLowerCase();
+  if (/\.(png|jpe?g|gif|bmp|webp|svg)(\?.*)?$/.test(normalized)) return "image";
+  if (/\.(mp4|mov|avi|mkv|webm)(\?.*)?$/.test(normalized)) return "video";
+  if (/\.(mp3|ogg|m4a|aac|wav)(\?.*)?$/.test(normalized)) return "audio";
+  return "document";
+}
+
+function normalizeMessageType(value: string, mediaUrl: string): SupportedMessageType {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "text") return "text";
+  if (normalized === "image") return "image";
+  if (normalized === "video") return "video";
+  if (normalized === "audio") return "audio";
+  if (normalized === "document" || normalized === "file" || normalized === "pdf") return "document";
+  if (!normalized && mediaUrl) return inferMediaTypeFromUrl(mediaUrl);
+  return "text";
+}
+
+function normalizeMediaUrlForMeta(raw: string, req: Request) {
+  const mediaUrl = String(raw || "").trim();
+  if (!mediaUrl) return "";
+  if (/^https?:\/\//i.test(mediaUrl)) return mediaUrl;
+  const base = getPublicBaseUrl(req).replace(/\/+$/g, "");
+  const relative = mediaUrl.startsWith("/") ? mediaUrl : `/${mediaUrl}`;
+  return `${base}${relative}`;
 }
 
 export async function GET(req: Request) {
@@ -35,6 +79,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const conversationId = url.searchParams.get("conversationId")?.trim() || "";
+  const limit = readBoundedInt(url.searchParams.get("limit"), DEFAULT_FETCH_LIMIT, 20, MAX_FETCH_LIMIT);
 
   if (!conversationId) {
     return NextResponse.json(
@@ -52,9 +97,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 });
   }
 
-  const messages = await prisma.waMessage.findMany({
+  const messagesDesc = await prisma.waMessage.findMany({
     where: { tenantId: auth.tenantId, conversationId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
+    take: limit,
     select: {
       id: true,
       direction: true,
@@ -68,6 +114,8 @@ export async function GET(req: Request) {
       readAt: true,
     },
   });
+
+  const messages = [...messagesDesc].reverse();
 
   return NextResponse.json({ success: true, messages });
 }
@@ -92,11 +140,25 @@ export async function POST(req: Request) {
 
   const conversationId = String(body.conversationId ?? "").trim();
   const text = String(body.text ?? "").trim();
-  const messageType = String(body.messageType ?? "text").trim().toLowerCase() || "text";
+  const rawMediaUrl = String(body.mediaUrl ?? "").trim();
+  const fileName = String(body.fileName ?? "").trim();
+  const messageType = normalizeMessageType(String(body.messageType ?? ""), rawMediaUrl);
+  const mediaUrlForMeta = normalizeMediaUrlForMeta(rawMediaUrl, req);
 
-  if (!conversationId || !text) {
+  if (!conversationId) {
+    return NextResponse.json({ success: false, error: "conversationId is required" }, { status: 400 });
+  }
+
+  if (messageType === "text" && !text) {
     return NextResponse.json(
-      { success: false, error: "conversationId and text are required" },
+      { success: false, error: "text is required for text messages" },
+      { status: 400 }
+    );
+  }
+
+  if (messageType !== "text" && !mediaUrlForMeta) {
+    return NextResponse.json(
+      { success: false, error: "mediaUrl is required for media messages" },
       { status: 400 }
     );
   }
@@ -126,13 +188,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: "Conversation not found" }, { status: 404 });
   }
 
-  if (messageType !== "text") {
-    return NextResponse.json(
-      { success: false, error: "Only text messages are supported in live inbox send" },
-      { status: 400 }
-    );
-  }
-
   if (!conversation.account.accessToken || !conversation.account.phoneNumberId) {
     return NextResponse.json(
       {
@@ -151,7 +206,8 @@ export async function POST(req: Request) {
         accountId: conversation.accountId,
         direction: "outbound",
         messageType,
-        text,
+        text: text || null,
+        mediaUrl: mediaUrlForMeta || null,
         status: "processing",
         sentByUserId: auth.userId,
       },
@@ -160,6 +216,7 @@ export async function POST(req: Request) {
         direction: true,
         messageType: true,
         text: true,
+        mediaUrl: true,
         status: true,
         createdAt: true,
         providerMessageId: true,
@@ -184,12 +241,23 @@ export async function POST(req: Request) {
   let dispatchError: string | null = null;
 
   try {
-    const metaRes = await sendMetaTextMessage({
-      phoneNumberId: conversation.account.phoneNumberId,
-      accessToken: conversation.account.accessToken,
-      to: conversation.contact.phone,
-      text,
-    });
+    const metaRes =
+      messageType === "text"
+        ? await sendMetaTextMessage({
+            phoneNumberId: conversation.account.phoneNumberId,
+            accessToken: conversation.account.accessToken,
+            to: conversation.contact.phone,
+            text,
+          })
+        : await sendMetaMediaMessage({
+            phoneNumberId: conversation.account.phoneNumberId,
+            accessToken: conversation.account.accessToken,
+            to: conversation.contact.phone,
+            mediaType: messageType,
+            link: mediaUrlForMeta,
+            caption: text || undefined,
+            filename: fileName || undefined,
+          });
 
     providerMessageId = metaRes.messageId;
     dispatched = true;
@@ -221,6 +289,7 @@ export async function POST(req: Request) {
     meta: {
       conversationId: conversation.id,
       messageType,
+      mediaUrl: mediaUrlForMeta || null,
       dispatched,
       providerMessageId,
       dispatchError,

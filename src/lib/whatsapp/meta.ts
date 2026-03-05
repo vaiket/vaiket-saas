@@ -17,6 +17,19 @@ type SendTextParams = {
   apiVersion?: string;
 };
 
+type SendMediaType = "image" | "video" | "audio" | "document";
+
+type SendMediaParams = {
+  phoneNumberId: string;
+  accessToken: string;
+  to: string;
+  mediaType: SendMediaType;
+  link: string;
+  caption?: string;
+  filename?: string;
+  apiVersion?: string;
+};
+
 type MetaSendResult = {
   messageId: string | null;
   raw: unknown;
@@ -246,6 +259,45 @@ export async function sendMetaTextMessage(params: SendTextParams): Promise<MetaS
       body: text,
       preview_url: Boolean(params.previewUrl),
     },
+  };
+
+  return sendMetaMessage(
+    {
+      phoneNumberId,
+      accessToken,
+      apiVersion,
+    },
+    payload
+  );
+}
+
+export async function sendMetaMediaMessage(params: SendMediaParams): Promise<MetaSendResult> {
+  const phoneNumberId = params.phoneNumberId.trim();
+  const accessToken = params.accessToken.trim();
+  const to = cleanPhone(params.to);
+  const mediaType = params.mediaType;
+  const link = readText(params.link);
+  const apiVersion = normalizeApiVersion(params.apiVersion);
+  const caption = readText(params.caption);
+  const filename = readText(params.filename);
+
+  if (!phoneNumberId || !accessToken || !to || !mediaType || !link) {
+    throw new Error("Missing required Meta media message parameters");
+  }
+
+  const mediaPayload: Record<string, unknown> = { link };
+  if ((mediaType === "image" || mediaType === "video" || mediaType === "document") && caption) {
+    mediaPayload.caption = caption;
+  }
+  if (mediaType === "document" && filename) {
+    mediaPayload.filename = filename;
+  }
+
+  const payload: Record<string, unknown> = {
+    messaging_product: "whatsapp",
+    to,
+    type: mediaType,
+    [mediaType]: mediaPayload,
   };
 
   return sendMetaMessage(

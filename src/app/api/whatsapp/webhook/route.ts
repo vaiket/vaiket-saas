@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import fs from "fs/promises";
+import path from "path";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
@@ -39,6 +41,8 @@ type MetaWebhookBody = {
 };
 
 const DEFAULT_WEBHOOK_MAX_BODY_BYTES = 512_000;
+const DEFAULT_GRAPH_API_VERSION = "v25.0";
+const DEFAULT_MEDIA_FETCH_TIMEOUT_MS = 20_000;
 
 function asArray<T = Record<string, unknown>>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -143,6 +147,120 @@ function parseMetaTimestamp(value: unknown) {
     return new Date();
   }
   return new Date(unixSeconds * 1000);
+}
+
+function graphVersion() {
+  const raw = readText(process.env.WHATSAPP_GRAPH_API_VERSION);
+  return raw || DEFAULT_GRAPH_API_VERSION;
+}
+
+function normalizeInboundMessageType(value: string) {
+  const normalized = readText(value).toLowerCase();
+  if (!normalized) return "text";
+  if (normalized === "text" || normalized === "button" || normalized === "interactive") return "text";
+  if (normalized === "sticker") return "image";
+  if (normalized === "image") return "image";
+  if (normalized === "video") return "video";
+  if (normalized === "audio" || normalized === "voice") return "audio";
+  if (normalized === "document" || normalized === "file") return "document";
+  return "text";
+}
+
+function extensionFromMime(mimeType: string, fallbackType: string) {
+  const normalized = readText(mimeType).toLowerCase();
+  if (normalized.includes("jpeg")) return "jpg";
+  if (normalized.includes("png")) return "png";
+  if (normalized.includes("webp")) return "webp";
+  if (normalized.includes("gif")) return "gif";
+  if (normalized.includes("mp4")) return "mp4";
+  if (normalized.includes("quicktime")) return "mov";
+  if (normalized.includes("mpeg")) return "mp3";
+  if (normalized.includes("ogg")) return "ogg";
+  if (normalized.includes("wav")) return "wav";
+  if (normalized.includes("pdf")) return "pdf";
+  if (normalized.includes("msword")) return "doc";
+  if (normalized.includes("wordprocessingml")) return "docx";
+  if (normalized.includes("spreadsheetml")) return "xlsx";
+  if (normalized.includes("presentationml")) return "pptx";
+
+  if (fallbackType === "image") return "jpg";
+  if (fallbackType === "video") return "mp4";
+  if (fallbackType === "audio") return "ogg";
+  return "bin";
+}
+
+function sanitizeFileToken(value: string, fallback: string) {
+  const token = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 32);
+  return token || fallback;
+}
+
+async function fetchMetaMediaToPublicUrl(params: {
+  accountId: string;
+  accessToken: string;
+  mediaId: string;
+  messageType: string;
+}) {
+  const mediaId = readText(params.mediaId);
+  const accessToken = readText(params.accessToken);
+  if (!mediaId || !accessToken) return null;
+
+  const timeoutMs = readBoundedInt(
+    process.env.WHATSAPP_MEDIA_FETCH_TIMEOUT_MS,
+    DEFAULT_MEDIA_FETCH_TIMEOUT_MS,
+    3_000,
+    60_000
+  );
+
+  const detailsController = new AbortController();
+  const detailsTimeout = setTimeout(() => detailsController.abort(), timeoutMs);
+
+  let details: Record<string, unknown> = {};
+  try {
+    const detailsRes = await fetch(
+      `https://graph.facebook.com/${graphVersion()}/${encodeURIComponent(mediaId)}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: detailsController.signal,
+      }
+    );
+    details = asRecord(await detailsRes.json().catch(() => ({})));
+    if (!detailsRes.ok) {
+      const message = readText(asRecord(details.error).message) || `Meta media lookup failed (${detailsRes.status})`;
+      throw new Error(message);
+    }
+  } finally {
+    clearTimeout(detailsTimeout);
+  }
+
+  const remoteUrl = readText(details.url);
+  if (!remoteUrl) return null;
+  const mimeType = readText(details.mime_type);
+  const ext = extensionFromMime(mimeType, params.messageType);
+  const fileToken = sanitizeFileToken(mediaId, "media");
+  const accountToken = sanitizeFileToken(params.accountId, "account");
+  const fileName = `${Date.now()}-${accountToken}-${fileToken}.${ext}`;
+  const uploadDir = path.join(process.cwd(), "public/uploads/wa-inbox");
+  const filePath = path.join(uploadDir, fileName);
+
+  const mediaController = new AbortController();
+  const mediaTimeout = setTimeout(() => mediaController.abort(), timeoutMs);
+
+  try {
+    const mediaRes = await fetch(remoteUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: mediaController.signal,
+    });
+    if (!mediaRes.ok) {
+      throw new Error(`Meta media download failed (${mediaRes.status})`);
+    }
+    const bytes = await mediaRes.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(filePath, buffer);
+    return `/uploads/wa-inbox/${fileName}`;
+  } finally {
+    clearTimeout(mediaTimeout);
+  }
 }
 
 function extractInboundText(message: Record<string, unknown>) {
@@ -448,8 +566,46 @@ async function handleInboundMessage(
   }
 
   const occurredAt = parseMetaTimestamp(message.timestamp);
-  const messageType = readText(message.type) || "text";
-  const text = extractInboundText(message);
+  const rawMessageType = readText(message.type).toLowerCase();
+  const messageType = normalizeInboundMessageType(rawMessageType);
+  let text = extractInboundText(message);
+  let mediaUrl: string | null = null;
+
+  if (messageType !== "text") {
+    const mediaPayload = asRecord(message[rawMessageType]);
+    const mediaId = readText(mediaPayload.id);
+    const caption = readText(mediaPayload.caption);
+    const directLink = readText(mediaPayload.link);
+    if (caption) {
+      text = caption;
+    } else {
+      text = text.startsWith("{") ? "" : text;
+    }
+
+    mediaUrl = directLink || null;
+
+    if (!mediaUrl && mediaId && account.accessToken) {
+      try {
+        mediaUrl = await fetchMetaMediaToPublicUrl({
+          accountId: account.id,
+          accessToken: account.accessToken,
+          mediaId,
+          messageType,
+        });
+      } catch (error) {
+        console.error("[whatsapp/webhook] inbound media fetch failed", {
+          mediaId,
+          accountId: account.id,
+          tenantId: account.tenantId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!text) {
+      text = `[${messageType}]`;
+    }
+  }
 
   const contact = await prisma.waContact.upsert({
     where: {
@@ -507,6 +663,7 @@ async function handleInboundMessage(
       direction: "inbound",
       messageType,
       text,
+      mediaUrl,
       status: "received",
       providerMessageId: providerMessageId || null,
       createdAt: occurredAt,

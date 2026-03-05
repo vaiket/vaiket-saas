@@ -44,7 +44,15 @@ type Conversation = {
     tags: string[];
     optedIn: boolean;
   };
-  messages: Array<{ id: string; direction: string; text: string | null; status: string; createdAt: string }>;
+  messages: Array<{
+    id: string;
+    direction: string;
+    messageType: string;
+    text: string | null;
+    mediaUrl: string | null;
+    status: string;
+    createdAt: string;
+  }>;
 };
 
 type Message = {
@@ -52,6 +60,7 @@ type Message = {
   direction: string;
   messageType: string;
   text: string | null;
+  mediaUrl: string | null;
   status: string;
   providerMessageId: string | null;
   createdAt: string;
@@ -64,6 +73,13 @@ type AccountOption = { id: string; name: string; phoneNumber: string };
 type ContactForm = { name: string; email: string; address: string; tags: string; optedIn: boolean };
 
 type MobileView = "list" | "chat" | "profile";
+type MediaKind = "image" | "video" | "audio" | "document";
+type ComposerAttachment = {
+  file: File;
+  fileName: string;
+  mediaType: MediaKind;
+  previewUrl: string | null;
+};
 
 const MESSAGE_REACTIONS = ["👍", "❤️", "😂", "🎉", "🙏", "🔥"];
 const COMPOSER_EMOJIS = ["🙂", "😊", "👋", "✅", "🙏", "🚚", "📦", "✨"];
@@ -79,6 +95,85 @@ const QUICK_REPLIES = [
   "Got it. I will connect you to support.",
 ];
 const VOICE_WAVE_HEIGHTS = [8, 10, 12, 9, 16, 10, 12, 8, 14, 9, 11, 8, 15, 10, 12, 9, 13, 8, 12, 9, 14, 10, 11, 8];
+const POLL_INTERVAL_MS = 8000;
+const MESSAGES_FETCH_LIMIT = 180;
+const LOCAL_CACHE_PREFIX = "vaiket_wa_inbox_v2";
+
+type ConversationsCache = {
+  accountId: string;
+  selectedConversationId: string;
+  conversations: Conversation[];
+  updatedAt: number;
+};
+
+type MessagesCache = {
+  conversationId: string;
+  messages: Message[];
+  updatedAt: number;
+};
+
+function conversationsCacheKey(accountId: string) {
+  return `${LOCAL_CACHE_PREFIX}_conversations_${accountId || "all"}`;
+}
+
+function messagesCacheKey(conversationId: string) {
+  return `${LOCAL_CACHE_PREFIX}_messages_${conversationId}`;
+}
+
+function safeParseJson<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function buildConversationsDigest(items: Conversation[]) {
+  if (items.length === 0) return "0";
+  return items
+    .map((item) => {
+      const last = item.messages[0];
+      return [
+        item.id,
+        item.status,
+        item.lastMessageAt || "",
+        last?.id || "",
+        last?.status || "",
+        last?.createdAt || "",
+      ].join("|");
+    })
+    .join("~");
+}
+
+function buildMessagesDigest(items: Message[]) {
+  if (items.length === 0) return "0";
+  return items
+    .map((item) =>
+      [
+        item.id,
+        item.status,
+        item.createdAt,
+        item.deliveredAt || "",
+        item.readAt || "",
+        item.mediaUrl || "",
+      ].join("|")
+    )
+    .join("~");
+}
+
+function inferMediaTypeFromFile(file: File): MediaKind {
+  const mime = (file.type || "").toLowerCase();
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+
+  const lowerName = file.name.toLowerCase();
+  if (/\.(png|jpe?g|gif|bmp|webp|svg)$/.test(lowerName)) return "image";
+  if (/\.(mp4|mov|avi|mkv|webm)$/.test(lowerName)) return "video";
+  if (/\.(mp3|m4a|aac|ogg|wav)$/.test(lowerName)) return "audio";
+  return "document";
+}
 
 async function readJsonSafe(res: Response) {
   const text = await res.text();
@@ -137,8 +232,13 @@ function initials(name: string | null | undefined, phone: string) {
 }
 
 function conversationPreview(item: Conversation) {
-  const text = item.messages[0]?.text || "No messages yet";
-  return text.length > 64 ? `${text.slice(0, 64)}...` : text;
+  const latest = item.messages[0];
+  if (!latest) return "No messages yet";
+  const text = (latest.text || "").trim();
+  if (text) return text.length > 64 ? `${text.slice(0, 64)}...` : text;
+  if (latest.messageType && latest.messageType !== "text") return `📎 ${latest.messageType} attachment`;
+  if (latest.mediaUrl) return "📎 Attachment";
+  return "No messages yet";
 }
 
 type ChatRow =
@@ -264,8 +364,25 @@ export default function WhatsAppInboxPage() {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [chatNotice, setChatNotice] = useState<string | null>(null);
   const [showTyping, setShowTyping] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<ComposerAttachment | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState(true);
   const attachmentRef = useRef<HTMLInputElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+  const previousConversationIdRef = useRef("");
+  const conversationDigestRef = useRef("");
+  const messagesDigestRef = useRef("");
+  const conversationsAbortRef = useRef<AbortController | null>(null);
+  const messagesAbortRef = useRef<AbortController | null>(null);
+  const hydratedAccountCacheRef = useRef(new Set<string>());
+
+  const clearPendingAttachment = useCallback(() => {
+    setPendingAttachment((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return null;
+    });
+    if (attachmentRef.current) attachmentRef.current.value = "";
+  }, []);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.id === selectedConversationId) || null,
@@ -279,13 +396,15 @@ export default function WhatsAppInboxPage() {
       const name = (item.contact.name || "").toLowerCase();
       const phone = item.contact.phone.toLowerCase();
       const account = item.account.name.toLowerCase();
-      const preview = (item.messages[0]?.text || "").toLowerCase();
+      const preview = (item.messages[0]?.text || item.messages[0]?.messageType || "").toLowerCase();
       return name.includes(value) || phone.includes(value) || account.includes(value) || preview.includes(value);
     });
   }, [conversations, query]);
 
+  const hiddenMessageIdSet = useMemo(() => new Set(hiddenMessageIds), [hiddenMessageIds]);
+
   const visibleMessages = useMemo(() => {
-    const withoutDeleted = messages.filter((item) => !hiddenMessageIds.includes(item.id));
+    const withoutDeleted = messages.filter((item) => !hiddenMessageIdSet.has(item.id));
     const needle = chatSearch.trim().toLowerCase();
     if (!needle) return withoutDeleted;
     return withoutDeleted.filter((item) => {
@@ -293,7 +412,7 @@ export default function WhatsAppInboxPage() {
       const typeValue = item.messageType.toLowerCase();
       return textValue.includes(needle) || typeValue.includes(needle);
     });
-  }, [messages, hiddenMessageIds, chatSearch]);
+  }, [messages, hiddenMessageIdSet, chatSearch]);
 
   const chatRows = useMemo(() => buildChatRows(visibleMessages), [visibleMessages]);
 
@@ -326,6 +445,9 @@ export default function WhatsAppInboxPage() {
   const loadConversations = useCallback(
     async (opts?: { silent?: boolean }) => {
       const silent = Boolean(opts?.silent);
+      const controller = new AbortController();
+      conversationsAbortRef.current?.abort();
+      conversationsAbortRef.current = controller;
       try {
         if (!silent) {
           setLoadingConversations(true);
@@ -334,43 +456,145 @@ export default function WhatsAppInboxPage() {
         const q = new URLSearchParams();
         if (selectedAccountId !== "all") q.set("accountId", selectedAccountId);
         const endpoint = q.toString() ? `/api/whatsapp/inbox/conversations?${q.toString()}` : "/api/whatsapp/inbox/conversations";
-        const res = await fetch(endpoint, { credentials: "include", cache: "no-store" });
+        const res = await fetch(endpoint, {
+          credentials: "include",
+          cache: "no-store",
+          signal: controller.signal,
+        });
         const data = await readJsonSafe(res);
         if (!res.ok || !data.success) throw new Error(data.error || "Failed to load conversations");
         const next = (data.conversations || []) as Conversation[];
-        setConversations(next);
-        setSelectedConversationId((prev) => {
-          if (next.length === 0) return "";
-          if (prev && next.some((item) => item.id === prev)) return prev;
-          return next[0].id;
-        });
+        const digest = buildConversationsDigest(next);
+        const nextSelectedConversationId =
+          next.length === 0
+            ? ""
+            : selectedConversationId && next.some((item) => item.id === selectedConversationId)
+              ? selectedConversationId
+              : next[0].id;
+
+        if (digest !== conversationDigestRef.current) {
+          conversationDigestRef.current = digest;
+          setConversations(next);
+        }
+
+        if (nextSelectedConversationId !== selectedConversationId) {
+          setSelectedConversationId(nextSelectedConversationId);
+        }
+
+        try {
+          const cachePayload: ConversationsCache = {
+            accountId: selectedAccountId,
+            selectedConversationId: nextSelectedConversationId,
+            conversations: next,
+            updatedAt: Date.now(),
+          };
+          localStorage.setItem(conversationsCacheKey(selectedAccountId), JSON.stringify(cachePayload));
+        } catch {
+          // ignore cache write failures
+        }
       } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         if (!silent) setError(err instanceof Error ? err.message : "Failed to load conversations");
       } finally {
-        if (!silent) setLoadingConversations(false);
+        if (!silent && conversationsAbortRef.current === controller) {
+          setLoadingConversations(false);
+        }
       }
     },
-    [selectedAccountId]
+    [selectedAccountId, selectedConversationId]
   );
 
   const loadMessages = useCallback(async (conversationId: string, opts?: { silent?: boolean }) => {
     const silent = Boolean(opts?.silent);
+    const controller = new AbortController();
+    messagesAbortRef.current?.abort();
+    messagesAbortRef.current = controller;
     try {
       if (!conversationId) return;
       if (!silent) {
         setLoadingMessages(true);
         setError(null);
       }
-      const endpoint = `/api/whatsapp/inbox/messages?conversationId=${encodeURIComponent(conversationId)}`;
-      const res = await fetch(endpoint, { credentials: "include", cache: "no-store" });
+      const endpoint = `/api/whatsapp/inbox/messages?conversationId=${encodeURIComponent(conversationId)}&limit=${MESSAGES_FETCH_LIMIT}`;
+      const res = await fetch(endpoint, {
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const data = await readJsonSafe(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to load messages");
-      setMessages((data.messages || []) as Message[]);
+      const next = (data.messages || []) as Message[];
+      const digest = buildMessagesDigest(next);
+      if (digest !== messagesDigestRef.current) {
+        messagesDigestRef.current = digest;
+        setMessages(next);
+      }
+      try {
+        const cachePayload: MessagesCache = {
+          conversationId,
+          messages: next,
+          updatedAt: Date.now(),
+        };
+        localStorage.setItem(messagesCacheKey(conversationId), JSON.stringify(cachePayload));
+      } catch {
+        // ignore cache write failures
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       if (!silent) setError(err instanceof Error ? err.message : "Failed to load messages");
     } finally {
-      if (!silent) setLoadingMessages(false);
+      if (!silent && messagesAbortRef.current === controller) {
+        setLoadingMessages(false);
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const cachedPrefs = safeParseJson<{ selectedAccountId: string }>(
+        localStorage.getItem(`${LOCAL_CACHE_PREFIX}_prefs`)
+      );
+      if (cachedPrefs?.selectedAccountId) {
+        setSelectedAccountId(cachedPrefs.selectedAccountId);
+      }
+    } catch {
+      // ignore cache read failures
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `${LOCAL_CACHE_PREFIX}_prefs`,
+        JSON.stringify({ selectedAccountId })
+      );
+    } catch {
+      // ignore cache write failures
+    }
+  }, [selectedAccountId]);
+
+  useEffect(() => {
+    if (hydratedAccountCacheRef.current.has(selectedAccountId)) return;
+    hydratedAccountCacheRef.current.add(selectedAccountId);
+    try {
+      const cached = safeParseJson<ConversationsCache>(
+        localStorage.getItem(conversationsCacheKey(selectedAccountId))
+      );
+      if (!cached || cached.accountId !== selectedAccountId || cached.conversations.length === 0) return;
+      conversationDigestRef.current = buildConversationsDigest(cached.conversations);
+      setConversations(cached.conversations);
+      setSelectedConversationId((prev) => prev || cached.selectedConversationId || cached.conversations[0]?.id || "");
+      setLoadingConversations(false);
+    } catch {
+      // ignore cache read failures
+    }
+  }, [selectedAccountId]);
+
+  useEffect(() => {
+    const syncVisibility = () => setIsPageVisible(document.visibilityState !== "hidden");
+    syncVisibility();
+    document.addEventListener("visibilitychange", syncVisibility);
+    return () => document.removeEventListener("visibilitychange", syncVisibility);
   }, []);
 
   useEffect(() => {
@@ -384,7 +608,20 @@ export default function WhatsAppInboxPage() {
   useEffect(() => {
     if (!selectedConversationId) {
       setMessages([]);
+      messagesDigestRef.current = "0";
       return;
+    }
+    try {
+      const cached = safeParseJson<MessagesCache>(
+        localStorage.getItem(messagesCacheKey(selectedConversationId))
+      );
+      if (cached?.conversationId === selectedConversationId && cached.messages.length > 0) {
+        messagesDigestRef.current = buildMessagesDigest(cached.messages);
+        setMessages(cached.messages);
+        setLoadingMessages(false);
+      }
+    } catch {
+      // ignore cache read failures
     }
     void loadMessages(selectedConversationId);
   }, [selectedConversationId, loadMessages]);
@@ -407,24 +644,43 @@ export default function WhatsAppInboxPage() {
   }, [selectedConversationId, conversations, contactFormConversationId]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => void loadConversations({ silent: true }), 8000);
-    return () => window.clearInterval(timer);
-  }, [loadConversations]);
+    if (conversations.length === 0) return;
+    try {
+      const cachePayload: ConversationsCache = {
+        accountId: selectedAccountId,
+        selectedConversationId,
+        conversations,
+        updatedAt: Date.now(),
+      };
+      localStorage.setItem(conversationsCacheKey(selectedAccountId), JSON.stringify(cachePayload));
+    } catch {
+      // ignore cache write failures
+    }
+  }, [conversations, selectedConversationId, selectedAccountId]);
 
   useEffect(() => {
-    if (!selectedConversationId) return;
-    const timer = window.setInterval(() => void loadMessages(selectedConversationId, { silent: true }), 8000);
+    if (!isPageVisible) return;
+    const timer = window.setInterval(() => void loadConversations({ silent: true }), POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [selectedConversationId, loadMessages]);
+  }, [loadConversations, isPageVisible]);
 
   useEffect(() => {
-    if (!selectedConversation || selectedConversation.status.trim().toLowerCase() !== "active") return;
+    if (!selectedConversationId || !isPageVisible) return;
+    const timer = window.setInterval(
+      () => void loadMessages(selectedConversationId, { silent: true }),
+      POLL_INTERVAL_MS
+    );
+    return () => window.clearInterval(timer);
+  }, [selectedConversationId, loadMessages, isPageVisible]);
+
+  useEffect(() => {
+    if (!selectedConversation || !isPageVisible || selectedConversation.status.trim().toLowerCase() !== "active") return;
     const timer = window.setInterval(() => {
       setShowTyping(true);
       window.setTimeout(() => setShowTyping(false), 1800);
     }, 14000);
     return () => window.clearInterval(timer);
-  }, [selectedConversation]);
+  }, [selectedConversation, isPageVisible]);
 
   useEffect(() => {
     if (!chatNotice) return;
@@ -443,26 +699,84 @@ export default function WhatsAppInboxPage() {
 
   useEffect(() => {
     if (!messageScrollRef.current) return;
-    messageScrollRef.current.scrollTop = messageScrollRef.current.scrollHeight;
+    const conversationChanged = previousConversationIdRef.current !== selectedConversationId;
+    if (conversationChanged || shouldStickToBottomRef.current) {
+      messageScrollRef.current.scrollTop = messageScrollRef.current.scrollHeight;
+    }
+    previousConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId, visibleMessages.length, showTyping]);
+
+  useEffect(() => {
+    if (!pendingAttachment?.previewUrl) return;
+    return () => URL.revokeObjectURL(pendingAttachment.previewUrl);
+  }, [pendingAttachment?.previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      conversationsAbortRef.current?.abort();
+      messagesAbortRef.current?.abort();
+    };
+  }, []);
+
+  const onMessagesScroll = useCallback(() => {
+    if (!messageScrollRef.current) return;
+    const el = messageScrollRef.current;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 96;
+  }, []);
 
   const onSend = async () => {
     try {
-      if (!selectedConversationId || !text.trim()) return;
+      if (!selectedConversationId) return;
+      const trimmedText = text.trim();
+      if (!trimmedText && !pendingAttachment) return;
       setSending(true);
       setError(null);
+      let mediaUrl = "";
+      let mediaType: MediaKind | "text" = "text";
+      let fileName = "";
+
+      if (pendingAttachment) {
+        const uploadForm = new FormData();
+        uploadForm.set("file", pendingAttachment.file);
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          credentials: "include",
+          body: uploadForm,
+        });
+        const uploadData = await readJsonSafe(uploadRes);
+        if (!uploadRes.ok || !uploadData.url) {
+          throw new Error(uploadData.error || "Failed to upload media");
+        }
+        mediaUrl = String(uploadData.url);
+        mediaType = pendingAttachment.mediaType;
+        fileName = pendingAttachment.fileName;
+      }
       const messageBody = replyToMessage
-        ? `↪ ${(replyToMessage.text || "media message").slice(0, 80)}\n${text.trim()}`
-        : text.trim();
+        ? `↪ ${(replyToMessage.text || "media message").slice(0, 80)}\n${trimmedText}`
+        : trimmedText;
+      const payload: Record<string, unknown> = {
+        conversationId: selectedConversationId,
+        messageType: mediaType,
+      };
+      const composedText = replyToMessage && trimmedText ? messageBody : trimmedText;
+      if (composedText) payload.text = composedText;
+      if (mediaType !== "text") {
+        payload.mediaUrl = mediaUrl;
+        payload.fileName = fileName;
+      }
+
       const res = await fetch("/api/whatsapp/inbox/messages", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId: selectedConversationId, text: messageBody }),
+        body: JSON.stringify(payload),
       });
       const data = await readJsonSafe(res);
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to send message");
       setText("");
+      shouldStickToBottomRef.current = true;
+      clearPendingAttachment();
       setReplyToId(null);
       setShowEmojiPicker(false);
       setShowTemplateMenu(false);
@@ -515,13 +829,13 @@ export default function WhatsAppInboxPage() {
   };
 
   const onForwardMessage = (message: Message) => {
-    const content = message.text || "";
+    const content = message.text || message.mediaUrl || "";
     setText((prev) => (prev ? `${prev}\n${content}` : content));
     setChatNotice("Message content copied to composer for forwarding.");
   };
 
   const onCopyMessage = async (message: Message) => {
-    const content = message.text || "";
+    const content = message.text || message.mediaUrl || "";
     if (!content) return;
     try {
       await navigator.clipboard.writeText(content);
@@ -560,7 +874,23 @@ export default function WhatsAppInboxPage() {
 
   const onAttachmentSelect = (file?: File | null) => {
     if (!file) return;
-    setText((prev) => `${prev}${prev ? "\n" : ""}[Attachment: ${file.name}]`);
+    const mediaType = inferMediaTypeFromFile(file);
+    const previewUrl =
+      mediaType === "image" || mediaType === "video" || mediaType === "audio"
+        ? URL.createObjectURL(file)
+        : null;
+    setPendingAttachment((prev) => {
+      if (prev?.previewUrl) URL.revokeObjectURL(prev.previewUrl);
+      return {
+        file,
+        fileName: file.name,
+        mediaType,
+        previewUrl,
+      };
+    });
+    setShowEmojiPicker(false);
+    setShowTemplateMenu(false);
+    setShowQuickReplies(false);
     setChatNotice(`Attached ${file.name}`);
   };
 
@@ -569,7 +899,9 @@ export default function WhatsAppInboxPage() {
     if (action === "export") {
       const lines = visibleMessages.map((msg) => {
         const who = msg.direction === "outbound" ? "Agent" : selectedConversation.contact.name || selectedConversation.contact.phone;
-        return `[${new Date(msg.createdAt).toLocaleString()}] ${who}: ${msg.text || `[${msg.messageType}]`}`;
+        const body = msg.text || `[${msg.messageType}]`;
+        const media = msg.mediaUrl ? ` (media: ${msg.mediaUrl})` : "";
+        return `[${new Date(msg.createdAt).toLocaleString()}] ${who}: ${body}${media}`;
       });
       const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -614,6 +946,8 @@ export default function WhatsAppInboxPage() {
   };
 
   const selectConversation = (id: string) => {
+    clearPendingAttachment();
+    shouldStickToBottomRef.current = true;
     setSelectedConversationId(id);
     setMobileView("chat");
     setShowChatMenu(false);
@@ -637,6 +971,14 @@ export default function WhatsAppInboxPage() {
             <p className="mt-1 text-sm text-slate-600">Shared inbox with live sync every 8 seconds.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
+                isPageVisible ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${isPageVisible ? "bg-emerald-500" : "bg-amber-500"}`} />
+              {isPageVisible ? "Live sync" : "Sync paused"}
+            </span>
             <select
               value={selectedAccountId}
               onChange={(event) => setSelectedAccountId(event.target.value)}
@@ -699,7 +1041,22 @@ export default function WhatsAppInboxPage() {
 
           <div className="max-h-[64vh] space-y-1 overflow-y-auto p-2">
             {loadingConversations ? (
-              <p className="px-2 py-3 text-sm text-slate-500">Loading conversations...</p>
+              <div className="space-y-2 px-2 py-2">
+                {Array.from({ length: 6 }).map((_, idx) => (
+                  <div
+                    key={`conversation_skeleton_${idx}`}
+                    className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="h-9 w-9 rounded-full bg-slate-200" />
+                      <div className="flex-1 space-y-1">
+                        <span className="block h-3 w-28 rounded bg-slate-200" />
+                        <span className="block h-2.5 w-20 rounded bg-slate-200" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : filteredConversations.length === 0 ? (
               <p className="rounded-xl border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">
                 No conversations found.
@@ -779,7 +1136,18 @@ export default function WhatsAppInboxPage() {
                         {selectedConversation.contact.name || selectedConversation.contact.phone}
                       </p>
                       <p className="truncate text-xs text-slate-500">
-                        {selectedConversation.contact.phone} • {chatStatusText}
+                        {selectedConversation.contact.phone}
+                        <span className="mx-1.5">•</span>
+                        <span className="inline-flex items-center gap-1">
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              showTyping || selectedConversation.status.trim().toLowerCase() === "active"
+                                ? "bg-emerald-500"
+                                : "bg-slate-400"
+                            }`}
+                          />
+                          {chatStatusText}
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -846,9 +1214,19 @@ export default function WhatsAppInboxPage() {
               <div className="relative flex-1 overflow-hidden">
                 <div className="absolute inset-0 bg-[#efeae2]" />
                 <div className="absolute inset-0 opacity-40 [background-size:36px_36px] [background-image:radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.12)_1px,transparent_0)]" />
-                <div ref={messageScrollRef} className="relative h-[56vh] max-h-[56vh] overflow-y-auto px-3 py-4 md:px-6">
+                <div
+                  ref={messageScrollRef}
+                  onScroll={onMessagesScroll}
+                  className="relative h-[56vh] max-h-[56vh] overflow-y-auto px-3 py-4 md:px-6"
+                >
                   {loadingMessages ? (
-                    <p className="text-sm text-slate-500">Loading messages...</p>
+                    <div className="space-y-3 py-2">
+                      {Array.from({ length: 8 }).map((_, idx) => (
+                        <div key={`message_skeleton_${idx}`} className={`flex ${idx % 2 === 0 ? "justify-start" : "justify-end"}`}>
+                          <span className="h-12 w-44 animate-pulse rounded-2xl bg-white/70 shadow-sm" />
+                        </div>
+                      ))}
+                    </div>
                   ) : chatRows.length === 0 ? (
                     <p className="text-sm text-slate-500">No messages in this conversation.</p>
                   ) : (
@@ -865,11 +1243,18 @@ export default function WhatsAppInboxPage() {
                         }
                         const msg = row.message;
                         const outbound = msg.direction === "outbound";
-                        const mediaUrl = firstUrl(msg.text);
+                        const mediaUrl = msg.mediaUrl || firstUrl(msg.text);
                         const showImage = isImageType(msg, mediaUrl);
                         const showVideo = isVideoType(msg, mediaUrl);
                         const showDoc = isDocumentType(msg, mediaUrl);
                         const showVoice = isVoiceType(msg, mediaUrl);
+                        const captionText = (() => {
+                          const raw = (msg.text || "").trim();
+                          if (!raw) return "";
+                          if (mediaUrl && raw === mediaUrl) return "";
+                          if (mediaUrl && raw.replace(mediaUrl, "").trim() === "") return "";
+                          return raw;
+                        })();
                         const reactions = reactionsMap[msg.id] || [];
                         return (
                           <div
@@ -934,8 +1319,10 @@ export default function WhatsAppInboxPage() {
                                   </div>
                                 ) : null}
 
-                                {(!showImage && !showVideo && !showDoc && !showVoice) || (msg.text && !mediaUrl) ? (
-                                  <p className="whitespace-pre-wrap break-words">{msg.text || "-"}</p>
+                                {(!showImage && !showVideo && !showDoc && !showVoice) || captionText ? (
+                                  <p className={`whitespace-pre-wrap break-words ${showImage || showVideo || showDoc || showVoice ? "mt-2" : ""}`}>
+                                    {captionText || "-"}
+                                  </p>
                                 ) : null}
 
                                 <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
@@ -1000,10 +1387,52 @@ export default function WhatsAppInboxPage() {
                   </div>
                 ) : null}
 
+                {pendingAttachment ? (
+                  <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                    <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-600">
+                      <p className="truncate">
+                        Attached {pendingAttachment.mediaType}: {pendingAttachment.fileName}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={clearPendingAttachment}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200"
+                        title="Remove attachment"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {pendingAttachment.mediaType === "image" && pendingAttachment.previewUrl ? (
+                      <img
+                        src={pendingAttachment.previewUrl}
+                        alt={pendingAttachment.fileName}
+                        className="max-h-40 rounded-lg border border-slate-200 object-cover"
+                      />
+                    ) : null}
+                    {pendingAttachment.mediaType === "video" && pendingAttachment.previewUrl ? (
+                      <video controls className="max-h-44 rounded-lg border border-slate-200">
+                        <source src={pendingAttachment.previewUrl} />
+                      </video>
+                    ) : null}
+                    {pendingAttachment.mediaType === "audio" && pendingAttachment.previewUrl ? (
+                      <audio controls className="h-8 w-full">
+                        <source src={pendingAttachment.previewUrl} />
+                      </audio>
+                    ) : null}
+                    {pendingAttachment.mediaType === "document" ? (
+                      <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700">
+                        <FileText className="h-4 w-4 text-blue-600" />
+                        <span>{pendingAttachment.fileName}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <input
                   ref={attachmentRef}
                   type="file"
                   className="hidden"
+                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
                   onChange={(event) => onAttachmentSelect(event.target.files?.[0])}
                 />
 
@@ -1140,7 +1569,7 @@ export default function WhatsAppInboxPage() {
                   <button
                     type="button"
                     onClick={() => void onSend()}
-                    disabled={sending || !text.trim()}
+                    disabled={sending || (!text.trim() && !pendingAttachment)}
                     className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}

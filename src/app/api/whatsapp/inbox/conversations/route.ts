@@ -61,7 +61,9 @@ export async function GET(req: Request) {
         select: {
           id: true,
           direction: true,
+          messageType: true,
           text: true,
+          mediaUrl: true,
           status: true,
           createdAt: true,
         },
