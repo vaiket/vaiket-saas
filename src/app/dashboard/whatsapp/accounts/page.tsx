@@ -173,6 +173,24 @@ function humanizeConnectReason(reason: string) {
   if (!raw) return "Facebook connect failed. Please try again.";
 
   const lower = raw.toLowerCase();
+  if (lower.startsWith("missing_scopes:") || lower.startsWith("missing_scopes=")) {
+    const list = raw.split(/[:=]/, 2)[1]?.trim() || "";
+    const scopes = list
+      .split(/[,\s]+/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (scopes.includes("business_management")) {
+      return "Missing `business_management` permission. Enable META_ALLOW_BUSINESS_MANAGEMENT=true and add business_management to META_OAUTH_SCOPES, then connect again.";
+    }
+
+    if (scopes.length > 0) {
+      return `Missing required permissions: ${scopes.join(", ")}. Reconnect and accept all requested permissions (you may need to remove the app from your Facebook business integrations and try again).`;
+    }
+
+    return "Missing required Meta permissions. Reconnect and accept all requested permissions.";
+  }
+
   if (lower.includes("invalid scopes") || lower.includes("invalid scope")) {
     if (lower.includes("business_management")) {
       return "Invalid scope `business_management`. Remove it from META_OAUTH_SCOPES (keep only whatsapp_business_management, whatsapp_business_messaging), then connect again.";
@@ -767,7 +785,7 @@ export default function WhatsAppAccountsPage() {
 
         {!autoHasToken && autoCandidates.length > 0 ? (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Fetched session has no token. Use "Use in Manual Form" and paste permanent token manually.
+            Fetched session has no token. Use &quot;Use in Manual Form&quot; and paste permanent token manually.
           </div>
         ) : null}
 

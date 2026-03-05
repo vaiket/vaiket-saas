@@ -64,6 +64,18 @@ function getOAuthScopes() {
   return "whatsapp_business_management,whatsapp_business_messaging";
 }
 
+function getOAuthAuthType() {
+  const configured = readText(process.env.META_OAUTH_AUTH_TYPE);
+  if (!configured) return "rerequest";
+
+  const normalized = configured.trim().toLowerCase();
+  if (normalized === "none" || normalized === "off" || normalized === "false" || normalized === "0") {
+    return "";
+  }
+
+  return configured.trim();
+}
+
 function getAppBaseUrl(req: Request) {
   const envBase = readText(process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL);
   if (envBase) return envBase.replace(/\/+$/g, "");
@@ -130,6 +142,12 @@ export async function GET(req: Request) {
   oauthUrl.searchParams.set("response_type", "code");
   oauthUrl.searchParams.set("scope", getOAuthScopes());
   oauthUrl.searchParams.set("state", state);
+  oauthUrl.searchParams.set("return_scopes", "true");
+
+  const authType = getOAuthAuthType();
+  if (authType) {
+    oauthUrl.searchParams.set("auth_type", authType);
+  }
 
   const response = NextResponse.redirect(oauthUrl);
   response.cookies.set("wa_connect_state", state, {

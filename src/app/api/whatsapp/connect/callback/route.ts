@@ -46,12 +46,23 @@ type ConnectContextPayload = {
   candidates: ConnectCandidate[];
 };
 
+const REQUIRED_OAUTH_SCOPES = ["whatsapp_business_management", "whatsapp_business_messaging"] as const;
+
 function readText(value: unknown) {
   return String(value ?? "").trim();
 }
 
 function getGraphVersion() {
   return readText(process.env.WHATSAPP_GRAPH_API_VERSION) || "v25.0";
+}
+
+function parseScopesParam(value: string | null) {
+  const raw = readText(value);
+  if (!raw) return [];
+  return raw
+    .split(/[,\s]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function decodeState(raw: string): OAuthStatePayload | null {
@@ -156,6 +167,20 @@ async function graphGet(
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+function collectGrantedScopesFromPermissions(payload: Record<string, unknown> | null) {
+  const granted = new Set<string>();
+  const rows = asArray<Record<string, unknown>>(payload?.data);
+  for (const row of rows) {
+    const permission = readText(row.permission).toLowerCase();
+    if (!permission) continue;
+    const status = readText(row.status).toLowerCase();
+    if (status === "granted") {
+      granted.add(permission);
+    }
+  }
+  return granted;
 }
 
 function normalizePhone(value: string) {
@@ -365,6 +390,41 @@ export async function GET(req: Request) {
     );
   }
 
+  const grantedScopesParam = parseScopesParam(url.searchParams.get("granted_scopes"));
+  const deniedScopesParam = parseScopesParam(url.searchParams.get("denied_scopes"));
+  const grantedScopes = new Set(grantedScopesParam.map((item) => item.toLowerCase()));
+  const deniedScopes = new Set(deniedScopesParam.map((item) => item.toLowerCase()));
+
+  const deniedRequired = REQUIRED_OAUTH_SCOPES.filter((scope) => deniedScopes.has(scope));
+  if (deniedRequired.length > 0) {
+    return clearStateAndRedirect(
+      redirectToAccounts(req, {
+        connect: "error",
+        reason: `missing_scopes:${deniedRequired.join(",")}`,
+      })
+    );
+  }
+
+  let permissionScopes = grantedScopes;
+  if (permissionScopes.size === 0) {
+    const permissionsRes = await graphGet(accessToken, "/me/permissions");
+    if (permissionsRes.ok) {
+      permissionScopes = collectGrantedScopesFromPermissions(permissionsRes.data);
+    }
+  }
+
+  if (permissionScopes.size > 0) {
+    const missingRequired = REQUIRED_OAUTH_SCOPES.filter((scope) => !permissionScopes.has(scope));
+    if (missingRequired.length > 0) {
+      return clearStateAndRedirect(
+        redirectToAccounts(req, {
+          connect: "error",
+          reason: `missing_scopes:${missingRequired.join(",")}`,
+        })
+      );
+    }
+  }
+
   const meRes = await graphGet(accessToken, "/me", { fields: "id,name" });
   const meData = (meRes.data || {}) as Record<string, unknown>;
 
@@ -435,10 +495,27 @@ export async function GET(req: Request) {
   if (candidates.length === 0) {
     const errorReason =
       ownedFallback.error || clientFallback.error || businessesRes?.error || "no_whatsapp_accounts_found";
+
+    let resolvedReason = errorReason;
+    const normalizedReason = errorReason.toLowerCase();
+    const isMissingPermission = normalizedReason.includes("missing permission") || normalizedReason.includes("#100");
+
+    if (
+      !ownedFallback.error &&
+      !clientFallback.error &&
+      businessesRes &&
+      businessesRes.error &&
+      isMissingPermission &&
+      permissionScopes.size > 0 &&
+      !permissionScopes.has("business_management")
+    ) {
+      resolvedReason = "missing_scopes:business_management";
+    }
+
     return clearStateAndRedirect(
       redirectToAccounts(req, {
         connect: "error",
-        reason: errorReason,
+        reason: resolvedReason,
       })
     );
   }
