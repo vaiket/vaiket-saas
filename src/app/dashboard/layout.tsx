@@ -130,6 +130,11 @@ const MENU_GROUPS: MenuGroup[] = [
             icon: <Settings className="h-3.5 w-3.5" />,
           },
           {
+            name: "Automation Builder",
+            path: "/dashboard/whatsapp/automation-builder",
+            icon: <Sparkles className="h-3.5 w-3.5" />,
+          },
+          {
             name: "Chatbot Rules",
             path: "/dashboard/whatsapp/chatbot",
             icon: <Bot className="h-3.5 w-3.5" />,

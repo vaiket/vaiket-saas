@@ -136,6 +136,13 @@ const moduleItems: ModuleItem[] = [
     badge: "Automation",
   },
   {
+    title: "Automation Builder",
+    description: "Design chatbot journeys visually with drag-drop nodes and live testing.",
+    href: "/dashboard/whatsapp/automation-builder",
+    icon: Gauge,
+    badge: "Builder",
+  },
+  {
     title: "Chatbot Rules",
     description: "Create AI-assisted auto replies and handover logic for teams.",
     href: "/dashboard/whatsapp/chatbot",
