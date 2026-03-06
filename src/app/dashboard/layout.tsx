@@ -437,23 +437,24 @@ const HUB_CHILD_SCOPE_EXCLUDE = new Set([
 const SIDEBAR_THEMES: Record<"default" | "hubBlue", SidebarTheme> = {
   default: {
     parentActive:
-      "border border-blue-300/45 bg-blue-500/15 text-white shadow-[0_10px_20px_-16px_rgba(59,130,246,0.95)]",
+      "border border-blue-300/55 bg-[linear-gradient(135deg,rgba(59,130,246,0.26)_0%,rgba(99,102,241,0.16)_100%)] text-white shadow-[0_14px_26px_-20px_rgba(59,130,246,0.95)]",
     parentIdle:
-      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/30 hover:bg-slate-800/45 hover:text-white",
+      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/35 hover:bg-white/[0.06] hover:text-white",
     iconActive: "text-blue-100",
     iconIdle: "text-slate-400 group-hover:text-blue-100",
     iconWrapActive: "grid h-7 w-7 place-items-center rounded-lg bg-blue-500/20",
     iconWrapIdle:
-      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/40 group-hover:bg-blue-500/12",
+      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/45 group-hover:bg-blue-500/16",
     submenuToggle:
-      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-700/60 hover:text-slate-100",
+      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-100",
     submenuChevronExpanded: "rotate-180 text-blue-200",
     tailChevronActive: "translate-x-0 text-blue-200",
     tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-blue-200",
-    childWrap: "ml-4 mt-2 space-y-1 border-l border-slate-700/70 pl-3",
-    childActive: "border border-blue-400/25 bg-blue-500/15 text-blue-100",
+    childWrap: "ml-4 mt-2 space-y-1.5 border-l border-slate-600/70 pl-3",
+    childActive:
+      "border border-blue-400/35 bg-[linear-gradient(135deg,rgba(59,130,246,0.24)_0%,rgba(99,102,241,0.18)_100%)] text-blue-100",
     childIdle:
-      "border border-transparent text-slate-300 hover:bg-slate-800/50 hover:text-slate-100",
+      "border border-transparent text-slate-300 hover:border-slate-500/35 hover:bg-white/[0.04] hover:text-slate-100",
     childIconActive: "bg-blue-400/20",
     childIconIdle: "bg-slate-700/70",
     childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-blue-200",
@@ -462,25 +463,25 @@ const SIDEBAR_THEMES: Record<"default" | "hubBlue", SidebarTheme> = {
   },
   hubBlue: {
     parentActive:
-      "border border-sky-300/45 bg-sky-500/15 text-white shadow-[0_10px_20px_-16px_rgba(56,189,248,0.95)]",
+      "border border-sky-300/55 bg-[linear-gradient(135deg,rgba(56,189,248,0.24)_0%,rgba(59,130,246,0.18)_100%)] text-white shadow-[0_14px_26px_-20px_rgba(56,189,248,0.95)]",
     parentIdle:
-      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/30 hover:bg-slate-800/45 hover:text-white",
+      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/35 hover:bg-white/[0.06] hover:text-white",
     iconActive: "text-sky-100",
     iconIdle: "text-slate-400 group-hover:text-sky-100",
     iconWrapActive:
       "grid h-7 w-7 place-items-center rounded-lg bg-sky-500/20",
     iconWrapIdle:
-      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/40 group-hover:bg-sky-500/12",
+      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/45 group-hover:bg-sky-500/15",
     submenuToggle:
-      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-700/60 hover:text-slate-100",
+      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-100",
     submenuChevronExpanded: "rotate-180 text-sky-200",
     tailChevronActive: "translate-x-0 text-sky-200",
     tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-sky-200",
-    childWrap: "ml-4 mt-2 space-y-1 border-l border-slate-700/70 pl-3",
+    childWrap: "ml-4 mt-2 space-y-1.5 border-l border-slate-600/70 pl-3",
     childActive:
-      "border border-sky-300/35 bg-sky-500/15 text-sky-50",
+      "border border-sky-300/45 bg-[linear-gradient(135deg,rgba(56,189,248,0.22)_0%,rgba(59,130,246,0.15)_100%)] text-sky-50",
     childIdle:
-      "border border-transparent text-slate-300 hover:bg-slate-800/50 hover:text-slate-100",
+      "border border-transparent text-slate-300 hover:border-slate-500/35 hover:bg-white/[0.04] hover:text-slate-100",
     childIconActive: "bg-sky-300/25",
     childIconIdle: "bg-slate-700/70",
     childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-sky-200",
@@ -863,6 +864,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           --sidebar-text: #dbe3f1;
           --sidebar-label: #94a3b8;
         }
+        .sidebar-panel {
+          background-image:
+            radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.22), transparent 34%),
+            radial-gradient(circle at 92% 2%, rgba(99, 102, 241, 0.2), transparent 36%),
+            linear-gradient(180deg, #0b1220 0%, #0f172a 52%, #111827 100%);
+        }
         .layout-surface {
           background-image:
             radial-gradient(circle at 12% -10%, rgba(59, 130, 246, 0.12), transparent 36%),
@@ -915,14 +922,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <aside
           ref={sidebarRef}
           className={`
-            gpu-layer sidebar-motion-safe fixed left-0 top-0 z-50 h-screen overflow-hidden border-r border-[var(--sidebar-divider)] bg-[var(--sidebar-bg)] shadow-[0_20px_45px_-28px_rgba(2,6,23,0.95)]
+            gpu-layer sidebar-motion-safe sidebar-panel fixed left-0 top-0 z-50 h-screen overflow-hidden border-r border-[var(--sidebar-divider)] bg-[var(--sidebar-bg)] shadow-[0_20px_45px_-28px_rgba(2,6,23,0.95)]
             transition-all duration-300 ease-out
             ${isCollapsed ? "lg:w-20 w-[84%] max-w-[320px]" : "lg:w-72 w-[84%] max-w-[320px]"}
             ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
             flex flex-col
           `}
         >
-          <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-5">
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_26%)]" />
+          <div className="pointer-events-none absolute inset-x-0 top-[104px] h-px bg-gradient-to-r from-transparent via-sky-300/30 to-transparent" />
+
+          <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 pb-4 pt-5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-3">
                 {isCollapsed ? (
@@ -966,20 +976,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 />
               </button>
             </div>
+
+            {!isCollapsed && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-sky-300/25 bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-sky-100">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+                Workspace Ready
+              </div>
+            )}
           </div>
 
           {!isCollapsed && (
-            <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-3">
-              <div className="relative rounded-lg border border-slate-600/60 bg-slate-900/60">
+            <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-3.5">
+              <div className="relative rounded-xl border border-slate-500/55 bg-slate-900/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Find menu..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-lg border border-transparent bg-transparent py-2.5 pl-10 pr-10 text-sm text-slate-100 outline-none placeholder:text-slate-400 transition focus:border-blue-400/45 focus:ring-2 focus:ring-blue-400/20"
+                  className="w-full rounded-xl border border-transparent bg-transparent py-2.5 pl-10 pr-11 text-sm text-slate-100 outline-none placeholder:text-slate-400 transition focus:border-blue-400/45 focus:ring-2 focus:ring-blue-400/20"
                   aria-label="Search menu items"
                 />
+                {!searchQuery && (
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-slate-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                    /
+                  </span>
+                )}
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
@@ -993,23 +1015,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           )}
 
-          <div className="app-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto px-2.5 py-3">
+          <div className="app-scrollbar relative z-10 min-h-0 flex-1 overflow-y-auto px-2.5 py-3.5">
             <nav>
               {filteredMenuGroups.map((group) => {
                 const groupId = `menu-group-${group.name.toLowerCase().replace(/\s+/g, "-")}`;
                 const isExpanded =
                   forceExpandInSearch || expandedGroups.includes(group.name);
                 return (
-                  <div key={group.name} className="mb-2">
+                  <div key={group.name} className="mb-3">
                     {!isCollapsed && group.items.length > 0 && (
                       <button
                         onClick={() => toggleGroup(group.name)}
-                        className="sidebar-motion-safe flex w-full items-center justify-between rounded-lg px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--sidebar-label)] transition hover:bg-white/[0.03] hover:text-slate-200"
+                        className="sidebar-motion-safe flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--sidebar-label)] transition hover:bg-white/[0.05] hover:text-slate-100"
                         aria-expanded={isExpanded}
                         aria-controls={groupId}
                       >
                         <span className="inline-flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-sky-300/80" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-sky-300/85" />
                           {group.name}
                         </span>
                         {isExpanded ? (
@@ -1052,16 +1074,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           : theme.tailChevronIdle;
                         const childWrapClass = theme.childWrap;
 
-                        const parentItemClass = `flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[11px] px-3 py-2.5 text-[14px] font-medium ${
+                        const parentItemClass = `flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium ${
                           isCollapsed ? "justify-center px-2" : ""
                         }`;
                         const submenuId = `submenu-${item.path.replace(/[^\w-]/g, "-")}`;
 
                         return (
-                          <div key={item.path} className="mb-1">
+                          <div key={item.path} className="mb-1.5">
                             <div
                               className={`
-                                sidebar-motion-safe group relative flex items-center rounded-[12px] border transition-[transform,background-color,border-color,color,box-shadow] duration-200 hover:-translate-y-[1px]
+                                sidebar-motion-safe group relative flex items-center overflow-hidden rounded-[14px] border transition-[transform,background-color,border-color,color,box-shadow] duration-200 hover:-translate-y-[1px]
                                 ${parentStateClass}
                                 ${theme.withBackdrop ? "backdrop-blur-[2px]" : ""}
                                 ${isCollapsed ? "justify-center" : ""}
@@ -1150,7 +1172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     <Link
                                       key={child.path}
                                       href={child.path}
-                                      className={`sidebar-motion-safe flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-all duration-200 ${childLinkClass} ${
+                                      className={`sidebar-motion-safe flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12px] font-medium transition-all duration-200 ${childLinkClass} ${
                                         isSubscriptionChild && !isChildActive
                                           ? theme.subscriptionRing
                                           : ""
@@ -1185,42 +1207,71 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
 
-          <div className="relative z-10 flex-shrink-0 border-t border-[var(--sidebar-divider)] px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-4">
-            <div className={`flex items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
-              <div className="relative flex-shrink-0">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-sm font-semibold text-white shadow-[0_6px_20px_rgba(79,70,229,0.4)]">
-                  {user?.name?.charAt(0) || "U"}
+          <div className="relative z-10 flex-shrink-0 border-t border-[var(--sidebar-divider)] px-3.5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3.5">
+            {isCollapsed ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative flex-shrink-0">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(79,70,229,0.45)]">
+                    {user?.name?.charAt(0) || "U"}
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#0f172a] bg-emerald-400" />
                 </div>
-                <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#0f172a] bg-emerald-400" />
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="rounded-xl border border-slate-500/60 p-2 text-slate-300 transition hover:border-rose-300/55 hover:bg-rose-500/15 hover:text-rose-100"
+                  title="Logout"
+                  aria-label="Logout"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
               </div>
+            ) : (
+              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 shadow-[0_18px_30px_-24px_rgba(2,6,23,0.9)] backdrop-blur-sm">
+                <div className="flex items-start gap-3">
+                  <div className="relative flex-shrink-0">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(79,70,229,0.45)]">
+                      {user?.name?.charAt(0) || "U"}
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#0f172a] bg-emerald-400" />
+                  </div>
 
-              {!isCollapsed && (
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-100">
-                    {user?.name || "User"}
-                  </p>
-                  <p className="truncate text-xs text-slate-400">
-                    {user?.email || "user@example.com"}
-                  </p>
-                  <div className="mt-1 flex items-center gap-1">
-                    <span className="text-xs text-slate-400">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-100">
+                      {user?.name || "User"}
+                    </p>
+                    <p className="truncate text-xs text-slate-400">
+                      {user?.email || "user@example.com"}
+                    </p>
+                    <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-500/45 bg-slate-800/45 px-2 py-0.5 text-[10px] text-slate-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                       {user?.role || "admin"}
-                    </span>
-                    <span className="h-1 w-1 rounded-full bg-slate-500" />
-                    <span className="text-xs font-medium text-emerald-400">Online</span>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              <button
-                onClick={handleLogout}
-                className={`flex-shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-white/10 hover:text-rose-300 ${isCollapsed ? "" : "ml-auto"}`}
-                title="Logout"
-                aria-label="Logout"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => goTo("/dashboard/profile")}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-500/50 bg-white/[0.04] px-2 py-2 text-xs font-medium text-slate-200 transition hover:border-blue-300/50 hover:bg-blue-500/12 hover:text-blue-100"
+                  >
+                    <User className="h-3.5 w-3.5" />
+                    Profile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-500/50 bg-white/[0.04] px-2 py-2 text-xs font-medium text-slate-200 transition hover:border-rose-300/55 hover:bg-rose-500/14 hover:text-rose-100"
+                    title="Logout"
+                    aria-label="Logout"
+                  >
+                    <LogOut className="h-3.5 w-3.5" />
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </aside>
 
