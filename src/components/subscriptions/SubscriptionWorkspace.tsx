@@ -52,6 +52,8 @@ type RazorpayCreateOrderResponse = {
   autopayStartAt?: string;
   trialDays?: number;
   recurringAmountInr?: number;
+  autopayFallback?: boolean;
+  fallbackReason?: string;
   customer?: {
     name?: string;
     email?: string;
@@ -278,6 +280,10 @@ export default function SubscriptionWorkspace({
         return;
       }
 
+      if (data.autopayFallback) {
+        toast("Recurring mandate unavailable. Opening standard Razorpay checkout.");
+      }
+
       const sdkLoaded = await loadRazorpayScript();
       if (!sdkLoaded || !window.Razorpay) {
         toast.error("Razorpay SDK failed to load");
@@ -369,6 +375,10 @@ export default function SubscriptionWorkspace({
                 await loadData(product);
               } catch {
                 toast.error("Verification request failed");
+                await markFailed({
+                  subId: data.subId,
+                  reason: "verification_request_failed",
+                });
               } finally {
                 setLoading(null);
               }
@@ -425,6 +435,11 @@ export default function SubscriptionWorkspace({
                 await loadData(product);
               } catch {
                 toast.error("Verification request failed");
+                await markFailed({
+                  subId: data.subId,
+                  orderId: data.orderId,
+                  reason: "verification_request_failed",
+                });
               } finally {
                 setLoading(null);
               }
@@ -618,7 +633,7 @@ export default function SubscriptionWorkspace({
                   : loading === `${plan.key}_${billingCycle}`
                   ? "Opening Checkout..."
                   : isTrialAutopayCard
-                  ? "Start 7-Day Trial"
+                  ? `Start ${DEFAULT_TRIAL_DAYS}-Day Trial`
                   : "Get Started"}
               </button>
 

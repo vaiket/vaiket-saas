@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getAuthContext } from "@/lib/auth/session";
+import { getAuthContext, type AuthContext } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { getCatalogPlan } from "@/lib/subscriptions/catalog";
 import { getPlanProduct, isProductKey } from "@/lib/subscriptions/products";
@@ -29,6 +29,51 @@ type TrialAutopayCreateResult = {
   error?: string;
 };
 
+type CheckoutPlan = {
+  key: string;
+  title: string;
+  priceMonth: number;
+  priceYear: number | null;
+};
+
+type CustomerInfo = {
+  name?: string | null;
+  email?: string | null;
+  contact?: string | null;
+};
+
+type OneTimeCheckoutResult =
+  | {
+      ok: true;
+      payload: {
+        success: true;
+        provider: "razorpay";
+        checkoutMode: "one_time";
+        subId: number;
+        orderId: string;
+        amount: number;
+        amountInPaise: number;
+        currency: string;
+        keyId: string;
+        planKey: string;
+        planTitle: string;
+        product: string;
+        billingCycle: BillingCycle;
+        customer: {
+          name?: string;
+          email?: string;
+          contact?: string;
+        };
+        autopayFallback?: boolean;
+        fallbackReason?: string;
+      };
+    }
+  | {
+      ok: false;
+      error: string;
+      status: number;
+    };
+
 const TRIAL_AUTOPAY_PLAN_KEY = "whatsapp_starter";
 const TRIAL_AUTOPAY_TRIAL_DAYS = 30;
 const TRIAL_AUTOPAY_CHARGE_INR = 2;
@@ -49,6 +94,41 @@ function getRazorpayAuthHeader(): RazorpayAuthConfig | null {
 
 function isTrialAutopayPlan(planKey: string, billingCycle: BillingCycle) {
   return planKey === TRIAL_AUTOPAY_PLAN_KEY && billingCycle === "monthly";
+}
+
+function resolveOneTimeCheckoutAmount(
+  plan: CheckoutPlan,
+  billingCycle: BillingCycle
+): number | null {
+  const configuredAmount =
+    billingCycle === "yearly" ? plan.priceYear ?? null : plan.priceMonth ?? null;
+
+  if (typeof configuredAmount === "number" && configuredAmount > 0) {
+    if (isTrialAutopayPlan(plan.key, billingCycle) && configuredAmount <= TRIAL_AUTOPAY_CHARGE_INR) {
+      return TRIAL_AUTOPAY_RECURRING_INR;
+    }
+    return configuredAmount;
+  }
+
+  if (isTrialAutopayPlan(plan.key, billingCycle)) {
+    return TRIAL_AUTOPAY_RECURRING_INR;
+  }
+
+  return null;
+}
+
+function extractRazorpayError(payload: unknown, fallback: string) {
+  const error = payload as
+    | {
+        error?: {
+          description?: string;
+          reason?: string;
+        };
+      }
+    | null
+    | undefined;
+
+  return error?.error?.description || error?.error?.reason || fallback;
 }
 
 function isLikelyPlaceholderPlanId(planId: string) {
@@ -164,6 +244,124 @@ async function createTrialAutopaySubscription(params: {
   return { ok: true, id: String(autopayJson.id) };
 }
 
+async function createOneTimeCheckout(params: {
+  auth: AuthContext;
+  authHeader: RazorpayAuthConfig;
+  subscriptionId: number;
+  plan: CheckoutPlan;
+  billingCycle: BillingCycle;
+  amountInr: number;
+  customer: CustomerInfo;
+  meta?: Record<string, unknown>;
+  autopayFallback?: boolean;
+  fallbackReason?: string;
+}): Promise<OneTimeCheckoutResult> {
+  await prisma.userSubscription.update({
+    where: { id: params.subscriptionId },
+    data: {
+      status: "pending",
+      amountPaid: params.amountInr,
+    },
+  });
+
+  const amountInPaise = Math.round(params.amountInr * 100);
+  const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
+    method: "POST",
+    headers: {
+      Authorization: params.authHeader.authHeader,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      amount: amountInPaise,
+      currency: "INR",
+      receipt: `sub_${params.subscriptionId}_${Date.now()}`,
+      notes: {
+        subId: String(params.subscriptionId),
+        planKey: params.plan.key,
+        billingCycle: params.billingCycle,
+        product: getPlanProduct(params.plan.key),
+        tenantId: String(params.auth.tenantId),
+        userId: String(params.auth.userId),
+        checkoutMode: "one_time",
+        ...(params.meta || {}),
+      },
+    }),
+    cache: "no-store",
+  });
+
+  const orderJson = await orderRes.json().catch(() => null);
+  if (!orderRes.ok || !orderJson?.id) {
+    await prisma.userSubscription.update({
+      where: { id: params.subscriptionId },
+      data: { status: "cancelled" },
+    });
+
+    return {
+      ok: false,
+      status: 502,
+      error: extractRazorpayError(orderJson, "Razorpay order creation failed"),
+    };
+  }
+
+  const orderId = String(orderJson.id);
+  await prisma.userSubscription.update({
+    where: { id: params.subscriptionId },
+    data: {
+      paymentRef: orderId,
+      amountPaid: params.amountInr,
+    },
+  });
+
+  await prisma.paymentLog.create({
+    data: {
+      tenantId: params.auth.tenantId,
+      userId: params.auth.userId,
+      provider: "razorpay",
+      providerRef: orderId,
+      amount: params.amountInr,
+      currency: "INR",
+      status: "initiated",
+      meta: {
+        subscriptionId: params.subscriptionId,
+        planKey: params.plan.key,
+        billingCycle: params.billingCycle,
+        checkoutMode: "one_time",
+        ...(params.meta || {}),
+      },
+    },
+  });
+
+  return {
+    ok: true,
+    payload: {
+      success: true,
+      provider: "razorpay",
+      checkoutMode: "one_time",
+      subId: params.subscriptionId,
+      orderId,
+      amount: params.amountInr,
+      amountInPaise,
+      currency: String(orderJson.currency || "INR"),
+      keyId: params.authHeader.keyId,
+      planKey: params.plan.key,
+      planTitle: params.plan.title,
+      product: getPlanProduct(params.plan.key),
+      billingCycle: params.billingCycle,
+      customer: {
+        name: params.customer.name || "User",
+        email: params.customer.email || params.auth.email,
+        contact: params.customer.contact || undefined,
+      },
+      ...(params.autopayFallback
+        ? {
+            autopayFallback: true,
+            fallbackReason: params.fallbackReason || "trial_autopay_unavailable",
+          }
+        : {}),
+    },
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const auth = await getAuthContext(req);
@@ -208,12 +406,15 @@ export async function POST(req: Request) {
       }
     }
 
-    const trialAutopayMode = isTrialAutopayPlan(plan.key, billingCycle);
-    const amountInr = trialAutopayMode
-      ? TRIAL_AUTOPAY_CHARGE_INR
-      : billingCycle === "yearly"
-      ? plan.priceYear
-      : plan.priceMonth;
+    const checkoutPlan: CheckoutPlan = {
+      key: plan.key,
+      title: plan.title,
+      priceMonth: plan.priceMonth,
+      priceYear: plan.priceYear ?? null,
+    };
+    const trialAutopayMode = isTrialAutopayPlan(checkoutPlan.key, billingCycle);
+    const oneTimeAmountInr = resolveOneTimeCheckoutAmount(checkoutPlan, billingCycle);
+    const amountInr = trialAutopayMode ? TRIAL_AUTOPAY_CHARGE_INR : oneTimeAmountInr;
 
     if (!amountInr || amountInr <= 0) {
       return NextResponse.json(
@@ -235,7 +436,7 @@ export async function POST(req: Request) {
       data: {
         userId: auth.userId,
         tenantId: auth.tenantId,
-        planKey: plan.key,
+        planKey: checkoutPlan.key,
         billingCycle,
         status: "pending",
         amountPaid: amountInr,
@@ -246,13 +447,18 @@ export async function POST(req: Request) {
       where: { id: auth.userId },
       select: { name: true, email: true, mobile: true },
     });
+    const customer = {
+      name: user?.name || "User",
+      email: user?.email || auth.email,
+      contact: user?.mobile || undefined,
+    };
 
     if (trialAutopayMode) {
       let createdAutopaySubscriptionId: string | null = null;
       try {
         const nowUnix = Math.floor(Date.now() / 1000);
         const startAtUnix = nowUnix + TRIAL_AUTOPAY_TRIAL_DAYS * 24 * 60 * 60;
-        const product = getPlanProduct(plan.key);
+        const product = getPlanProduct(checkoutPlan.key);
 
         let trialPlan = await ensureTrialAutopayPlanId(authHeader.authHeader);
         let autopayResult = await createTrialAutopaySubscription({
@@ -260,7 +466,7 @@ export async function POST(req: Request) {
           planId: trialPlan.planId,
           startAtUnix,
           subscriptionId: subscription.id,
-          planKey: plan.key,
+          planKey: checkoutPlan.key,
           billingCycle,
           product,
           tenantId: auth.tenantId,
@@ -310,7 +516,7 @@ export async function POST(req: Request) {
             status: "initiated",
             meta: {
               subscriptionId: subscription.id,
-              planKey: plan.key,
+              planKey: checkoutPlan.key,
               billingCycle,
               checkoutMode: "trial_autopay",
               autopaySubscriptionId,
@@ -330,19 +536,15 @@ export async function POST(req: Request) {
           amountInPaise,
           currency: "INR",
           keyId: authHeader.keyId,
-          planKey: plan.key,
-          planTitle: plan.title,
-          product: getPlanProduct(plan.key),
+          planKey: checkoutPlan.key,
+          planTitle: checkoutPlan.title,
+          product: getPlanProduct(checkoutPlan.key),
           billingCycle,
           autopaySubscriptionId,
           autopayStartAt: new Date(startAtUnix * 1000).toISOString(),
           trialDays: TRIAL_AUTOPAY_TRIAL_DAYS,
           recurringAmountInr: TRIAL_AUTOPAY_RECURRING_INR,
-          customer: {
-            name: user?.name || "User",
-            email: user?.email || auth.email,
-            contact: user?.mobile || undefined,
-          },
+          customer,
         });
       } catch (autopayError) {
         if (createdAutopaySubscriptionId) {
@@ -362,108 +564,97 @@ export async function POST(req: Request) {
           ).catch(() => null);
         }
 
-        await prisma.userSubscription.update({
-          where: { id: subscription.id },
-          data: { status: "cancelled" },
+        const fallbackReason =
+          autopayError instanceof Error
+            ? autopayError.message
+            : "Unable to start trial autopay checkout";
+
+        await prisma.paymentLog.create({
+          data: {
+            tenantId: auth.tenantId,
+            userId: auth.userId,
+            provider: "razorpay",
+            providerRef: createdAutopaySubscriptionId,
+            amount: TRIAL_AUTOPAY_CHARGE_INR,
+            currency: "INR",
+            status: "failed",
+            meta: {
+              subscriptionId: subscription.id,
+              planKey: checkoutPlan.key,
+              billingCycle,
+              checkoutMode: "trial_autopay",
+              fallbackTo: "one_time",
+              reason: fallbackReason,
+            },
+          },
         });
 
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              autopayError instanceof Error
-                ? autopayError.message
-                : "Unable to start trial autopay checkout",
+        if (!oneTimeAmountInr || oneTimeAmountInr <= 0) {
+          await prisma.userSubscription.update({
+            where: { id: subscription.id },
+            data: { status: "cancelled" },
+          });
+
+          return NextResponse.json(
+            {
+              success: false,
+              error: fallbackReason,
+            },
+            { status: 502 }
+          );
+        }
+
+        const fallbackCheckout = await createOneTimeCheckout({
+          auth,
+          authHeader,
+          subscriptionId: subscription.id,
+          plan: checkoutPlan,
+          billingCycle,
+          amountInr: oneTimeAmountInr,
+          customer,
+          autopayFallback: true,
+          fallbackReason,
+          meta: {
+            trialAutopayFallback: true,
+            trialAutopayError: fallbackReason,
           },
-          { status: 502 }
-        );
+        });
+
+        if (fallbackCheckout.ok === false) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: fallbackCheckout.error,
+            },
+            { status: fallbackCheckout.status }
+          );
+        }
+
+        return NextResponse.json(fallbackCheckout.payload);
       }
     }
 
-    const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
-      method: "POST",
-      headers: {
-        Authorization: authHeader.authHeader,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        amount: amountInPaise,
-        currency: "INR",
-        receipt: `sub_${subscription.id}_${Date.now()}`,
-        notes: {
-          subId: String(subscription.id),
-          planKey: plan.key,
-          billingCycle,
-          product: getPlanProduct(plan.key),
-          tenantId: String(auth.tenantId),
-          userId: String(auth.userId),
-          checkoutMode: "one_time",
-        },
-      }),
-      cache: "no-store",
+    const oneTimeCheckout = await createOneTimeCheckout({
+      auth,
+      authHeader,
+      subscriptionId: subscription.id,
+      plan: checkoutPlan,
+      billingCycle,
+      amountInr,
+      customer,
     });
 
-    const orderJson = await orderRes.json().catch(() => null);
-    if (!orderRes.ok || !orderJson?.id) {
-      await prisma.userSubscription.update({
-        where: { id: subscription.id },
-        data: { status: "cancelled" },
-      });
+    if (oneTimeCheckout.ok === false) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            orderJson?.error?.description ||
-            orderJson?.error?.reason ||
-            "Razorpay order creation failed",
+          error: oneTimeCheckout.error,
         },
-        { status: 502 }
+        { status: oneTimeCheckout.status }
       );
     }
 
-    await prisma.userSubscription.update({
-      where: { id: subscription.id },
-      data: { paymentRef: String(orderJson.id) },
-    });
-
-    await prisma.paymentLog.create({
-      data: {
-        tenantId: auth.tenantId,
-        userId: auth.userId,
-        provider: "razorpay",
-        providerRef: String(orderJson.id),
-        amount: amountInr,
-        currency: "INR",
-        status: "initiated",
-        meta: {
-          subscriptionId: subscription.id,
-          planKey: plan.key,
-          billingCycle,
-          checkoutMode: "one_time",
-        },
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      provider: "razorpay",
-      checkoutMode: "one_time",
-      subId: subscription.id,
-      orderId: String(orderJson.id),
-      amount: amountInr,
-      amountInPaise,
-      currency: String(orderJson.currency || "INR"),
-      keyId: authHeader.keyId,
-      planKey: plan.key,
-      planTitle: plan.title,
-      product: getPlanProduct(plan.key),
-      billingCycle,
-      customer: {
-        name: user?.name || "User",
-        email: user?.email || auth.email,
-        contact: user?.mobile || undefined,
-      },
-    });
+    return NextResponse.json(oneTimeCheckout.payload);
   } catch (error) {
     console.error("Razorpay create-order error:", error);
     return NextResponse.json(

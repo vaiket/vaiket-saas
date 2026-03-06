@@ -81,6 +81,10 @@ function isTrialAutopaySubscription(planKey: string, billingCycle: string) {
   return planKey === TRIAL_AUTOPAY_PLAN_KEY && billingCycle === "monthly";
 }
 
+function isAutopaySubscriptionRef(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase().startsWith("sub_");
+}
+
 async function findSubscriptionFromInitiatedLog(orderId: string) {
   const initiatedLog = await prisma.paymentLog.findFirst({
     where: {
@@ -242,20 +246,25 @@ export async function POST(req: Request) {
       );
     }
 
-    const trialAutopayMode = isTrialAutopaySubscription(
-      subscription.planKey,
-      subscription.billingCycle
-    );
+    const resolvedAutopaySubscriptionId =
+      autopaySubscriptionId ||
+      (!orderId && isAutopaySubscriptionRef(subscription.paymentRef)
+        ? String(subscription.paymentRef || "").trim()
+        : "");
+    const trialAutopayMode =
+      isTrialAutopaySubscription(subscription.planKey, subscription.billingCycle) &&
+      Boolean(resolvedAutopaySubscriptionId) &&
+      !orderId;
 
-    if (!orderId && autopaySubscriptionId) {
-      if (!trialAutopayMode) {
-        return NextResponse.json(
-          { success: false, error: "Autopay verification is not enabled for this plan" },
-          { status: 400 }
-        );
-      }
+    if (!orderId && autopaySubscriptionId && !trialAutopayMode) {
+      return NextResponse.json(
+        { success: false, error: "Autopay verification is not enabled for this plan" },
+        { status: 400 }
+      );
+    }
 
-      if (subscription.paymentRef && subscription.paymentRef !== autopaySubscriptionId) {
+    if (trialAutopayMode) {
+      if (subscription.paymentRef && subscription.paymentRef !== resolvedAutopaySubscriptionId) {
         return NextResponse.json(
           { success: false, error: "Autopay subscription mismatch" },
           { status: 400 }
@@ -293,7 +302,7 @@ export async function POST(req: Request) {
           startedAt,
           endsAt,
           amountPaid: 0,
-          paymentRef: autopaySubscriptionId,
+          paymentRef: resolvedAutopaySubscriptionId,
         },
       });
 
@@ -310,7 +319,7 @@ export async function POST(req: Request) {
             event: "mandate_authorized",
             checkoutMode: "trial_autopay",
             localSubscriptionId: updated.id,
-            autopaySubscriptionId,
+            autopaySubscriptionId: resolvedAutopaySubscriptionId,
             trialDays: TRIAL_AUTOPAY_TRIAL_DAYS,
             trialChargeInr: TRIAL_AUTOPAY_CHARGE_INR,
             trialRefunded: refundResult.success,
@@ -328,80 +337,6 @@ export async function POST(req: Request) {
         trialRefunded: refundResult.success,
         trialRefundId: refundResult.refundId,
         trialRefundError: refundResult.error,
-        subscription: {
-          id: updated.id,
-          planKey: updated.planKey,
-          product: getPlanProduct(updated.planKey),
-          status: updated.status,
-          billingCycle: updated.billingCycle,
-          endsAt: updated.endsAt,
-        },
-      });
-    }
-
-    if (trialAutopayMode) {
-      const resolvedAutopaySubscriptionId =
-        autopaySubscriptionId || String(subscription.paymentRef || "").trim();
-
-      if (!resolvedAutopaySubscriptionId) {
-        return NextResponse.json(
-          { success: false, error: "Autopay subscription ID missing for trial plan" },
-          { status: 400 }
-        );
-      }
-
-      const startedAt = new Date();
-      const endsAt = resolveTrialEndsAt(startedAt);
-      const refundResult = await tryRefundTrialCharge({
-        paymentId,
-        authHeader: authHeader.authHeader,
-        localSubscriptionId: subscription.id,
-      });
-
-      const updated = await prisma.userSubscription.update({
-        where: { id: subscription.id },
-        data: {
-          status: "active",
-          startedAt,
-          endsAt,
-          amountPaid: 0,
-          paymentRef: resolvedAutopaySubscriptionId,
-        },
-      });
-
-      await prisma.paymentLog.create({
-        data: {
-          tenantId: auth.tenantId,
-          userId: auth.userId,
-          provider: "razorpay",
-          providerRef: paymentId,
-          amount: TRIAL_AUTOPAY_CHARGE_INR,
-          currency: "INR",
-          status: "success",
-          meta: {
-            orderId,
-            localSubscriptionId: updated.id,
-            planKey: updated.planKey,
-            billingCycle: updated.billingCycle,
-            checkoutMode: "trial_autopay",
-            autopaySubscriptionId: resolvedAutopaySubscriptionId,
-            trialDays: TRIAL_AUTOPAY_TRIAL_DAYS,
-            trialChargeInr: TRIAL_AUTOPAY_CHARGE_INR,
-            trialRefunded: refundResult.success,
-            refundId: refundResult.refundId,
-            refundError: refundResult.error,
-          },
-        },
-      });
-
-      return NextResponse.json({
-        success: true,
-        checkoutMode: "trial_autopay",
-        trialRefunded: refundResult.success,
-        trialRefundId: refundResult.refundId,
-        trialRefundError: refundResult.error,
-        autopaySubscriptionId: resolvedAutopaySubscriptionId,
-        autopayAuthRequired: true,
         subscription: {
           id: updated.id,
           planKey: updated.planKey,
@@ -442,7 +377,8 @@ export async function POST(req: Request) {
     }
 
     const amountPaid =
-      subscription.billingCycle === "yearly" ? plan.priceYear : plan.priceMonth;
+      subscription.amountPaid ??
+      (subscription.billingCycle === "yearly" ? plan.priceYear : plan.priceMonth);
     const startedAt = new Date();
     const endsAt = resolveEndsAt(startedAt, subscription.billingCycle);
 
