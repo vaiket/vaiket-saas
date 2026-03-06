@@ -2,12 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import Lottie from "lottie-react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   Bot,
+  BriefcaseBusiness,
   Home,
   CreditCard,
   Database,
@@ -30,11 +32,14 @@ import {
   ChevronRight,
   ChevronUp,
   ChevronsLeft,
+  CheckCheck,
+  Clock3,
   ExternalLink,
   SendHorizontal,
   Zap,
 } from "lucide-react";
 import NotificationBell from "@/components/dashboard/NotificationBell";
+import dotsAnimation from "@/assets/dots.json";
 
 type AppUser = {
   name?: string | null;
@@ -98,6 +103,53 @@ const MENU_GROUPS: MenuGroup[] = [
     name: "Core",
     items: [
       { name: "Overview", path: "/dashboard", icon: <Home className="h-5 w-5" /> },
+      {
+        name: "CRM",
+        path: "/dashboard/crm",
+        icon: <BriefcaseBusiness className="h-5 w-5" />,
+        children: [
+          {
+            name: "Overview",
+            path: "/dashboard/crm",
+            icon: <Home className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Leads",
+            path: "/dashboard/crm/leads",
+            icon: <Users className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Clients",
+            path: "/dashboard/crm/clients",
+            icon: <User className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Pipeline",
+            path: "/dashboard/crm/pipeline",
+            icon: <BarChart3 className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Tasks",
+            path: "/dashboard/crm/tasks",
+            icon: <CheckCheck className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Appointments",
+            path: "/dashboard/crm/appointments",
+            icon: <Clock3 className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Team",
+            path: "/dashboard/crm/team",
+            icon: <Users className="h-3.5 w-3.5" />,
+          },
+          {
+            name: "Templates",
+            path: "/dashboard/crm/templates",
+            icon: <Sparkles className="h-3.5 w-3.5" />,
+          },
+        ],
+      },
       {
         name: "WhatsApp Hub",
         path: "/dashboard/whatsapp",
@@ -329,35 +381,33 @@ const MENU_GROUPS: MenuGroup[] = [
 
 const HUB_LAUNCHER_APPS: HubLauncherItem[] = [
   {
+    name: "Vaiket CRM",
+    path: "/dashboard/crm",
+    subtitle: "Leads, clients, pipeline",
+    logoPath: "/launcher/crm.png",
+    logoAlt: "Vaiket CRM logo",
+  },
+  {
     name: "WhatsApp Hub",
     path: "/dashboard/whatsapp",
     subtitle: "Accounts, inbox, automation",
-    logoPath: "/launcher/whatsapp-logo.svg",
+    logoPath: "/launcher/whatsapp-business.png",
     logoAlt: "WhatsApp logo",
   },
   {
     name: "Email Hub",
     path: "/dashboard/email-hub",
     subtitle: "Mailboxes, campaigns, inbox",
-    logoPath: "/launcher/mail-logo.svg",
+    logoPath: "/launcher/email.png",
     logoAlt: "Mail logo",
   },
   {
     name: "RCS Hub",
     path: "/dashboard/rcs",
     subtitle: "RCS inbox, workflows, analytics",
-    logoPath: "/launcher/rcs-logo.svg",
+    logoPath: "/launcher/rcs.png",
     logoAlt: "RCS logo",
   },
-];
-
-const APPS_LAUNCHER_DOT_COLORS = [
-  "bg-sky-500",
-  "bg-indigo-500",
-  "bg-violet-500",
-  "bg-cyan-400",
-  "bg-blue-500",
-  "bg-fuchsia-500",
 ];
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -367,9 +417,21 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 const HUB_ROOT_PATHS = new Set([
+  "/dashboard/crm",
   "/dashboard/whatsapp",
   "/dashboard/email-hub",
   "/dashboard/rcs",
+]);
+
+const SIDEBAR_HUB_PATHS = new Set([
+  "/dashboard/crm",
+  "/dashboard/whatsapp",
+  "/dashboard/email-hub",
+  "/dashboard/rcs",
+]);
+
+const HUB_CHILD_SCOPE_EXCLUDE = new Set([
+  "/dashboard/billing",
 ]);
 
 const SIDEBAR_THEMES: Record<"default" | "hubBlue", SidebarTheme> = {
@@ -632,6 +694,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     [pathname]
   );
 
+  const activeHubPath = useMemo(() => {
+    const coreGroup = MENU_GROUPS.find((group) => group.name === "Core");
+    if (!coreGroup) return null;
+
+    const hubItems = coreGroup.items.filter((item) => SIDEBAR_HUB_PATHS.has(item.path));
+
+    const rootMatch = hubItems.find((item) => isPathMatch(item.path));
+    if (rootMatch) return rootMatch.path;
+
+    const childMatch = hubItems.find((item) =>
+      (item.children || []).some(
+        (child) => !HUB_CHILD_SCOPE_EXCLUDE.has(child.path) && isPathMatch(child.path)
+      )
+    );
+
+    return childMatch?.path ?? null;
+  }, [isPathMatch]);
+
   const toggleGroup = (groupName: string) => {
     setExpandedGroups((prev) =>
       prev.includes(groupName)
@@ -674,11 +754,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isPathMatch]);
 
+  const scopedMenuGroups = useMemo(() => {
+    if (!activeHubPath) return MENU_GROUPS;
+
+    return MENU_GROUPS.map((group) => {
+      if (group.name !== "Core") return group;
+
+      return {
+        ...group,
+        items: group.items.filter((item) => {
+          if (!SIDEBAR_HUB_PATHS.has(item.path)) return true;
+          return item.path === activeHubPath;
+        }),
+      };
+    });
+  }, [activeHubPath]);
+
   const filteredMenuGroups = useMemo(() => {
     const query = deferredSearchQuery.trim().toLowerCase();
-    if (!query) return MENU_GROUPS;
+    if (!query) return scopedMenuGroups;
 
-    return MENU_GROUPS.map((group) => ({
+    return scopedMenuGroups.map((group) => ({
       ...group,
       items: group.items
         .map((item) => {
@@ -696,7 +792,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })
         .filter((item): item is MenuItem => Boolean(item)),
     })).filter((group) => group.items.length > 0);
-  }, [deferredSearchQuery]);
+  }, [deferredSearchQuery, scopedMenuGroups]);
 
   const pageTitle = useMemo(() => {
     const allItems = MENU_GROUPS.flatMap((group) => group.items);
@@ -1180,41 +1276,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 <div className="relative" ref={appsMenuRef}>
                   <button
+                    type="button"
                     onClick={() => {
                       setAppsMenuOpen((prev) => !prev);
                       setProfileMenuOpen(false);
                     }}
-                    className={`group relative inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200/90 bg-[radial-gradient(circle_at_15%_15%,#dbeafe_0%,#ffffff_42%,#e0e7ff_100%)] shadow-[0_8px_18px_-16px_rgba(15,23,42,0.7)] transition hover:border-blue-200 hover:shadow-[0_14px_30px_-22px_rgba(59,130,246,0.9)] ${
+                    className={`group relative inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/90 bg-[radial-gradient(circle_at_15%_15%,#dbeafe_0%,#ffffff_42%,#e0e7ff_100%)] shadow-[0_10px_20px_-16px_rgba(15,23,42,0.75)] transition-all duration-300 hover:border-blue-300 hover:shadow-[0_16px_34px_-22px_rgba(59,130,246,0.95)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 ${
                       appsMenuOpen ? "border-blue-300 bg-[radial-gradient(circle_at_20%_20%,#c7d2fe_0%,#eff6ff_48%,#e9d5ff_100%)]" : ""
                     }`}
                     aria-label="Open apps launcher"
+                    aria-haspopup="menu"
+                    aria-expanded={appsMenuOpen}
                     title="Apps"
                   >
-                    <span className="grid grid-cols-3 gap-1">
-                      {APPS_LAUNCHER_DOT_COLORS.map((color, idx) => (
-                        <span
-                          key={`apps_dot_${idx}`}
-                          className={`h-1.5 w-1.5 rounded-full ${color} transition-all duration-300 ${
-                            appsMenuOpen
-                              ? "scale-110 animate-pulse"
-                              : "group-hover:scale-110"
-                          } ${idx % 2 === 0 ? "group-hover:-translate-y-0.5" : "group-hover:translate-y-0.5"}`}
-                          style={appsMenuOpen ? { animationDelay: `${idx * 90}ms` } : undefined}
-                        />
-                      ))}
+                    <span
+                      className={`pointer-events-none absolute inset-0 rounded-xl transition-all duration-300 ${
+                        appsMenuOpen
+                          ? "ring-2 ring-blue-400/90 shadow-[0_0_0_6px_rgba(59,130,246,0.22)]"
+                          : "ring-1 ring-blue-200/80 shadow-[0_0_0_4px_rgba(59,130,246,0.12)] group-hover:ring-2 group-hover:ring-blue-300/90 group-hover:shadow-[0_0_0_6px_rgba(59,130,246,0.16)]"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={`pointer-events-none absolute -top-2 left-1/2 inline-flex -translate-x-1/2 items-center justify-center rounded-full border border-blue-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-blue-700 shadow-sm transition ${
+                        appsMenuOpen ? "opacity-100" : "animate-pulse opacity-100"
+                      }`}
+                      aria-hidden="true"
+                    >
+                      Apps
+                    </span>
+                    <span
+                      className={`pointer-events-none inline-flex h-9 w-9 items-center justify-center transition-transform duration-300 ${
+                        appsMenuOpen ? "scale-105" : "group-hover:scale-105"
+                      }`}
+                    >
+                      <Lottie
+                        animationData={dotsAnimation}
+                        loop
+                        autoplay
+                        className="h-9 w-9"
+                        rendererSettings={{ preserveAspectRatio: "xMidYMid meet" }}
+                      />
                     </span>
                   </button>
 
                   {appsMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-[340px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_48px_-28px_rgba(15,23,42,0.5)]">
+                    <div className="absolute right-0 z-50 mt-2 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_48px_-28px_rgba(15,23,42,0.5)] sm:w-[440px]">
                       <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 px-4 py-3">
                         <p className="text-sm font-semibold text-slate-900">Apps</p>
                         <p className="text-xs text-slate-500">Quick switch between Vaiket hubs</p>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2.5 p-3">
+                      <div className="grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-4">
                         {HUB_LAUNCHER_APPS.map((app) => {
                           const active = isPathMatch(app.path);
+                          const isCrmApp = app.path === "/dashboard/crm";
+                          const isRcsApp = app.path === "/dashboard/rcs";
                           return (
                             <button
                               key={app.path}
@@ -1225,13 +1342,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                   : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/50"
                               }`}
                             >
-                              <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white ring-4 ring-slate-50">
+                              <div
+                                className={`mb-2 inline-flex items-center justify-center rounded-xl border ring-4 ${
+                                  isCrmApp
+                                    ? "h-12 w-12 overflow-hidden border-blue-300 bg-[radial-gradient(circle_at_32%_28%,#eef6ff_0%,#dbeafe_58%,#bfdbfe_100%)] ring-blue-100/90"
+                                    : "h-10 w-10 border-slate-200 bg-white ring-slate-50"
+                                }`}
+                              >
                                 <Image
                                   src={app.logoPath}
                                   alt={app.logoAlt}
-                                  width={24}
-                                  height={24}
-                                  className="h-6 w-6 object-contain"
+                                  width={isCrmApp ? 56 : isRcsApp ? 30 : 24}
+                                  height={isCrmApp ? 56 : isRcsApp ? 30 : 24}
+                                  className={
+                                    isCrmApp
+                                      ? "h-full w-full scale-[1.32] object-cover object-center"
+                                      : isRcsApp
+                                      ? "h-7 w-7 object-contain"
+                                      : "h-6 w-6 object-contain"
+                                  }
                                 />
                               </div>
                               <p className="truncate text-xs font-semibold text-slate-900">{app.name}</p>

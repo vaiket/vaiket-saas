@@ -683,10 +683,10 @@ export default function DashboardPage() {
               subtitle="Review incoming conversations"
             />
             <QuickLinkCard
-              href="/dashboard/leads"
+              href="/dashboard/crm"
               icon={<Rocket className="h-4 w-4" />}
-              title="Leads Board"
-              subtitle="Track pipeline movement"
+              title="CRM Workspace"
+              subtitle="Manage leads, clients and deals"
             />
             <QuickLinkCard
               href="/dashboard/settings"

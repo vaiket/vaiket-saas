@@ -4,6 +4,7 @@ import path from "path";
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { handleInboundCrmAutomation } from "@/lib/crm/whatsapp";
 import { sendMetaTextMessage } from "@/lib/whatsapp/meta";
 
 type AccountCtx = {
@@ -831,6 +832,16 @@ export async function POST(req: Request) {
 
         const inbound = await handleInboundMessage(account, message, profileName);
         if (inbound) {
+          await handleInboundCrmAutomation({
+            tenantId: account.tenantId,
+            accountId: account.id,
+            conversationId: inbound.conversationId,
+            from: inbound.from,
+            text: inbound.text,
+            profileName,
+            phoneNumberId: account.phoneNumberId,
+            accessToken: account.accessToken,
+          });
           await runKeywordWorkflowOnInbound(account, inbound);
         }
       }
