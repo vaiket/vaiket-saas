@@ -5,7 +5,7 @@ import { getPlanProduct, isProductKey } from "@/lib/subscriptions/products";
 
 export async function GET(req: Request) {
   try {
-    const auth = await getAuthContext(req);
+    const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) return NextResponse.json({ subscription: null });
 
     const url = new URL(req.url);

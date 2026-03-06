@@ -155,7 +155,7 @@ async function tryRefundTrialCharge(params: {
 
 export async function POST(req: Request) {
   try {
-    const auth = await getAuthContext(req);
+    const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },

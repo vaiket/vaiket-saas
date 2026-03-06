@@ -122,17 +122,34 @@ function loadRazorpayScript(): Promise<boolean> {
       );
 
       if (existing) {
-        existing.addEventListener("load", () => resolve(true), { once: true });
-        existing.addEventListener("error", () => resolve(false), { once: true });
+        const handleLoad = () => resolve(Boolean(window.Razorpay));
+        const handleError = () => {
+          razorpayScriptPromise = null;
+          existing.remove();
+          resolve(false);
+        };
+        if (existing.dataset.loaded === "true") {
+          resolve(Boolean(window.Razorpay));
+          return;
+        }
+        existing.addEventListener("load", handleLoad, { once: true });
+        existing.addEventListener("error", handleError, { once: true });
         return;
       }
 
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
       script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
+      script.onload = () => {
+        script.dataset.loaded = "true";
+        resolve(true);
+      };
+      script.onerror = () => {
+        razorpayScriptPromise = null;
+        script.remove();
+        resolve(false);
+      };
+      document.head.appendChild(script);
     });
   }
 
@@ -210,9 +227,9 @@ export default function SubscriptionWorkspace({
       setLoadingData(true);
       const qs = `?product=${encodeURIComponent(targetProduct)}`;
       const [plansRes, activeRes, historyRes] = await Promise.all([
-        fetch(`/api/subscriptions/plans${qs}`, { cache: "no-store" }),
-        fetch(`/api/subscriptions/active${qs}`, { cache: "no-store" }),
-        fetch(`/api/subscriptions/history${qs}`, { cache: "no-store" }),
+        fetch(`/api/subscriptions/plans${qs}`, { cache: "no-store", credentials: "include" }),
+        fetch(`/api/subscriptions/active${qs}`, { cache: "no-store", credentials: "include" }),
+        fetch(`/api/subscriptions/history${qs}`, { cache: "no-store", credentials: "include" }),
       ]);
 
       const plansJson = await plansRes.json();
@@ -249,6 +266,7 @@ export default function SubscriptionWorkspace({
     try {
       await fetch("/api/payments/razorpay/mark-failed", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(args),
       });
@@ -265,6 +283,7 @@ export default function SubscriptionWorkspace({
     try {
       const res = await fetch("/api/payments/razorpay/create-order", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planKey,
@@ -275,7 +294,9 @@ export default function SubscriptionWorkspace({
 
       const data = (await res.json()) as RazorpayCreateOrderResponse;
       if (!data.success) {
-        toast.error(data.error || "Unable to create subscription order");
+        toast.error(
+          res.status === 401 ? "Session expired. Refresh and login again." : data.error || "Unable to create subscription order"
+        );
         setLoading(null);
         return;
       }
@@ -341,6 +362,7 @@ export default function SubscriptionWorkspace({
               try {
                 const verifyRes = await fetch("/api/payments/razorpay/verify", {
                   method: "POST",
+                  credentials: "include",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     subId: data.subId,
@@ -412,6 +434,7 @@ export default function SubscriptionWorkspace({
               try {
                 const verifyRes = await fetch("/api/payments/razorpay/verify", {
                   method: "POST",
+                  credentials: "include",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
                     subId: data.subId,

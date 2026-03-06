@@ -22,6 +22,10 @@ export type AuthContext = {
   jti: string | null;
 };
 
+type AuthContextOptions = {
+  allowSessionFallback?: boolean;
+};
+
 const roleRank: Record<Role, number> = {
   viewer: 0,
   member: 1,
@@ -59,7 +63,10 @@ export function getTokenFromRequest(req: Request): string | null {
   return match?.[1] ?? null;
 }
 
-export async function getAuthContext(req: Request): Promise<AuthContext | null> {
+export async function getAuthContext(
+  req: Request,
+  options?: AuthContextOptions
+): Promise<AuthContext | null> {
   const token = getTokenFromRequest(req);
   if (!token) return null;
 
@@ -88,23 +95,34 @@ export async function getAuthContext(req: Request): Promise<AuthContext | null> 
   if (user.status !== "active") return null;
 
   if (decoded.jti) {
-    const session = await prisma.userSession.findUnique({
-      where: { jti: decoded.jti },
-      select: {
-        id: true,
-        revokedAt: true,
-        expiresAt: true,
-      },
-    });
+    try {
+      const session = await prisma.userSession.findUnique({
+        where: { jti: decoded.jti },
+        select: {
+          id: true,
+          revokedAt: true,
+          expiresAt: true,
+        },
+      });
 
-    if (!session) return null;
-    if (session.revokedAt) return null;
-    if (session.expiresAt.getTime() <= Date.now()) return null;
+      if (!session) {
+        if (!options?.allowSessionFallback) return null;
+      } else {
+        if (session.revokedAt) return null;
+        if (session.expiresAt.getTime() <= Date.now()) return null;
 
-    await prisma.userSession.update({
-      where: { jti: decoded.jti },
-      data: { lastSeenAt: new Date() },
-    });
+        await prisma.userSession.update({
+          where: { jti: decoded.jti },
+          data: { lastSeenAt: new Date() },
+        });
+      }
+    } catch (error) {
+      if (!options?.allowSessionFallback) {
+        console.error("getAuthContext session lookup failed:", error);
+        return null;
+      }
+      console.warn("getAuthContext falling back to JWT-only session validation");
+    }
   }
 
   return {
