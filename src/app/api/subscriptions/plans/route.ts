@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isProductKey, getPlanProduct } from "@/lib/subscriptions/products";
 import { getCatalogPlans } from "@/lib/subscriptions/catalog";
+import { ensureBillingSchema } from "@/lib/subscriptions/schema";
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -16,6 +17,7 @@ export async function GET(req: Request) {
   let mapped: Array<Record<string, unknown>> = [];
 
   try {
+    await ensureBillingSchema();
     const plans = await prisma.subscriptionPlan.findMany({
       where: product
         ? {

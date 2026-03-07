@@ -5,6 +5,7 @@ import { getAuthContext } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { getCatalogPlan } from "@/lib/subscriptions/catalog";
 import { getPlanProduct } from "@/lib/subscriptions/products";
+import { ensureBillingSchema } from "@/lib/subscriptions/schema";
 
 type VerifyBody = {
   subId?: unknown;
@@ -155,6 +156,7 @@ async function tryRefundTrialCharge(params: {
 
 export async function POST(req: Request) {
   try {
+    await ensureBillingSchema();
     const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) {
       return NextResponse.json(

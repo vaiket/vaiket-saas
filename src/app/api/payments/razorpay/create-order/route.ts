@@ -4,6 +4,7 @@ import { getAuthContext, type AuthContext } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { getCatalogPlan } from "@/lib/subscriptions/catalog";
 import { getPlanProduct, isProductKey } from "@/lib/subscriptions/products";
+import { ensureBillingSchema } from "@/lib/subscriptions/schema";
 
 type BillingCycle = "monthly" | "yearly";
 
@@ -364,6 +365,7 @@ async function createOneTimeCheckout(params: {
 
 export async function POST(req: Request) {
   try {
+    await ensureBillingSchema();
     const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) {
       return NextResponse.json(
@@ -443,10 +445,15 @@ export async function POST(req: Request) {
       },
     });
 
-    const user = await prisma.user.findUnique({
-      where: { id: auth.userId },
-      select: { name: true, email: true, mobile: true },
-    });
+    const user = await prisma.user
+      .findUnique({
+        where: { id: auth.userId },
+        select: { name: true, email: true, mobile: true },
+      })
+      .catch((error) => {
+        console.warn("Razorpay create-order user prefill fallback:", error);
+        return null;
+      });
     const customer = {
       name: user?.name || "User",
       email: user?.email || auth.email,

@@ -2,7 +2,15 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 
+import { ensureAuthSchema } from "@/lib/auth/schema";
 import { prisma } from "@/lib/prisma";
+
+type MeTokenPayload = {
+  userId?: number;
+  tenantId?: number;
+  email?: string;
+  role?: string;
+};
 
 export async function GET(req: Request) {
   try {
@@ -27,9 +35,9 @@ export async function GET(req: Request) {
       // no-op
     }
 
-    let decoded: any;
+    let decoded: MeTokenPayload;
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET!);
+      decoded = jwt.verify(token, process.env.JWT_SECRET!) as MeTokenPayload;
     } catch {
       return NextResponse.json(
         { success: false, error: "Invalid or expired token" },
@@ -45,20 +53,37 @@ export async function GET(req: Request) {
       );
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        mobile: true,
-        profileImage: true,
-        role: true,
-        onboardingCompleted: true,
-        tenantId: true,
-        status: true,
-      },
-    });
+    await ensureAuthSchema();
+
+    const user = await prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          profileImage: true,
+          role: true,
+          onboardingCompleted: true,
+          tenantId: true,
+          status: true,
+        },
+      })
+      .catch((error) => {
+        console.warn("/api/auth/me user fallback:", error);
+        return {
+          id: userId,
+          name: null,
+          email: String(decoded?.email ?? ""),
+          mobile: null,
+          profileImage: null,
+          role: String(decoded?.role ?? "member"),
+          onboardingCompleted: false,
+          tenantId: Number(decoded?.tenantId ?? 0),
+          status: "active",
+        };
+      });
 
     if (!user) {
       return NextResponse.json(

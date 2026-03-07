@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth/session";
 import { getPlanProduct, isProductKey } from "@/lib/subscriptions/products";
+import { ensureBillingSchema } from "@/lib/subscriptions/schema";
 
 export async function GET(req: Request) {
   try {
+    await ensureBillingSchema();
     const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) return NextResponse.json({ subscription: null });
 

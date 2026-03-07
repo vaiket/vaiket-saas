@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getAuthContext } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { ensureBillingSchema } from "@/lib/subscriptions/schema";
 
 type MarkFailedBody = {
   subId?: unknown;
@@ -12,6 +13,7 @@ type MarkFailedBody = {
 
 export async function POST(req: Request) {
   try {
+    await ensureBillingSchema();
     const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) {
       return NextResponse.json(

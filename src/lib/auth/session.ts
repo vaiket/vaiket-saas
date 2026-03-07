@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 
+import { ensureAuthSchema } from "@/lib/auth/schema";
 import { prisma } from "@/lib/prisma";
 
 export type Role = "owner" | "admin" | "member" | "viewer";
@@ -78,6 +79,8 @@ export async function getAuthContext(
   }
 
   if (!decoded?.userId || !decoded?.tenantId || !decoded?.email) return null;
+
+  await ensureAuthSchema();
 
   const user = await prisma.user.findUnique({
     where: { id: decoded.userId },

@@ -3,9 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { getAuthContext } from "@/lib/auth/session";
 import { getCatalogPlan } from "@/lib/subscriptions/catalog";
 import { getPlanProduct, isProductKey } from "@/lib/subscriptions/products";
+import { ensureBillingSchema } from "@/lib/subscriptions/schema";
 
 export async function GET(req: Request) {
   try {
+    await ensureBillingSchema();
     const auth = await getAuthContext(req, { allowSessionFallback: true });
     if (!auth) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
