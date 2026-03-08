@@ -1,32 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  BadgeCheck,
   Check,
   CheckCheck,
   Clock3,
-  Copy,
   FileText,
-  Forward,
   Loader2,
-  Mic,
-  MoreVertical,
+  Mail,
+  MapPin,
+  MessageSquareText,
   Paperclip,
   PhoneCall,
-  PlayCircle,
-  Reply,
   RefreshCcw,
   Search,
   SendHorizontal,
-  SmilePlus,
-  Trash2,
+  Tags,
   UserCircle2,
   Video,
   X,
-  Zap,
 } from "lucide-react";
 
 type Conversation = {
@@ -73,7 +69,9 @@ type AccountOption = { id: string; name: string; phoneNumber: string };
 type ContactForm = { name: string; email: string; address: string; tags: string; optedIn: boolean };
 
 type MobileView = "list" | "chat" | "profile";
+type ConversationFilter = "all" | "active" | "closed" | "tagged";
 type MediaKind = "image" | "video" | "audio" | "document";
+type EmojiCategory = "recent" | "smileys" | "people" | "symbols" | "objects";
 type ComposerAttachment = {
   file: File;
   fileName: string;
@@ -81,8 +79,99 @@ type ComposerAttachment = {
   previewUrl: string | null;
 };
 
-const MESSAGE_REACTIONS = ["👍", "❤️", "😂", "🎉", "🙏", "🔥"];
-const COMPOSER_EMOJIS = ["🙂", "😊", "👋", "✅", "🙏", "🚚", "📦", "✨"];
+const EMOJI_CATEGORY_TABS: Array<{ key: EmojiCategory; icon: string; label: string }> = [
+  { key: "recent", icon: "🕘", label: "Recent" },
+  { key: "smileys", icon: "😀", label: "Smileys" },
+  { key: "people", icon: "👍", label: "People" },
+  { key: "symbols", icon: "❤️", label: "Symbols" },
+  { key: "objects", icon: "⚽", label: "Objects" },
+];
+
+const EMOJI_OPTIONS: Array<{ emoji: string; label: string; category: Exclude<EmojiCategory, "recent"> }> = [
+  { emoji: "😀", label: "grinning face", category: "smileys" },
+  { emoji: "😃", label: "smiling face", category: "smileys" },
+  { emoji: "😄", label: "happy face", category: "smileys" },
+  { emoji: "😁", label: "beaming face", category: "smileys" },
+  { emoji: "😆", label: "laughing face", category: "smileys" },
+  { emoji: "😂", label: "tears of joy", category: "smileys" },
+  { emoji: "🤣", label: "rolling laughter", category: "smileys" },
+  { emoji: "😊", label: "smiling eyes", category: "smileys" },
+  { emoji: "🙂", label: "slight smile", category: "smileys" },
+  { emoji: "😉", label: "wink", category: "smileys" },
+  { emoji: "😍", label: "heart eyes", category: "smileys" },
+  { emoji: "😘", label: "kiss", category: "smileys" },
+  { emoji: "😎", label: "cool", category: "smileys" },
+  { emoji: "🤔", label: "thinking", category: "smileys" },
+  { emoji: "😴", label: "sleeping", category: "smileys" },
+  { emoji: "😭", label: "crying", category: "smileys" },
+  { emoji: "😡", label: "angry", category: "smileys" },
+  { emoji: "😮", label: "surprised", category: "smileys" },
+  { emoji: "🥳", label: "party", category: "smileys" },
+  { emoji: "😇", label: "angel", category: "smileys" },
+
+  { emoji: "👍", label: "thumbs up", category: "people" },
+  { emoji: "👎", label: "thumbs down", category: "people" },
+  { emoji: "👏", label: "clap", category: "people" },
+  { emoji: "🙌", label: "raised hands", category: "people" },
+  { emoji: "🙏", label: "folded hands", category: "people" },
+  { emoji: "👋", label: "waving hand", category: "people" },
+  { emoji: "🤝", label: "handshake", category: "people" },
+  { emoji: "💪", label: "strong", category: "people" },
+  { emoji: "🤞", label: "crossed fingers", category: "people" },
+  { emoji: "✌️", label: "peace", category: "people" },
+  { emoji: "👌", label: "ok hand", category: "people" },
+  { emoji: "🤟", label: "love sign", category: "people" },
+  { emoji: "🙋", label: "raising hand", category: "people" },
+  { emoji: "💁", label: "help desk", category: "people" },
+  { emoji: "🧑‍💻", label: "developer", category: "people" },
+  { emoji: "👨‍💼", label: "office worker", category: "people" },
+  { emoji: "👩‍💼", label: "business woman", category: "people" },
+  { emoji: "🧑‍🎓", label: "student", category: "people" },
+  { emoji: "🧑‍🔧", label: "technician", category: "people" },
+  { emoji: "🧑‍🚀", label: "astronaut", category: "people" },
+
+  { emoji: "❤️", label: "red heart", category: "symbols" },
+  { emoji: "🧡", label: "orange heart", category: "symbols" },
+  { emoji: "💛", label: "yellow heart", category: "symbols" },
+  { emoji: "💚", label: "green heart", category: "symbols" },
+  { emoji: "💙", label: "blue heart", category: "symbols" },
+  { emoji: "💜", label: "purple heart", category: "symbols" },
+  { emoji: "🤍", label: "white heart", category: "symbols" },
+  { emoji: "🖤", label: "black heart", category: "symbols" },
+  { emoji: "💔", label: "broken heart", category: "symbols" },
+  { emoji: "❣️", label: "heart exclamation", category: "symbols" },
+  { emoji: "✨", label: "sparkles", category: "symbols" },
+  { emoji: "🔥", label: "fire", category: "symbols" },
+  { emoji: "✅", label: "check mark", category: "symbols" },
+  { emoji: "❌", label: "cross mark", category: "symbols" },
+  { emoji: "⚠️", label: "warning", category: "symbols" },
+  { emoji: "🎉", label: "party popper", category: "symbols" },
+  { emoji: "💯", label: "hundred", category: "symbols" },
+  { emoji: "⭐", label: "star", category: "symbols" },
+  { emoji: "📌", label: "pin", category: "symbols" },
+  { emoji: "📍", label: "location pin", category: "symbols" },
+
+  { emoji: "📦", label: "package", category: "objects" },
+  { emoji: "📄", label: "document", category: "objects" },
+  { emoji: "📎", label: "paperclip", category: "objects" },
+  { emoji: "📱", label: "phone", category: "objects" },
+  { emoji: "💻", label: "laptop", category: "objects" },
+  { emoji: "🖥️", label: "desktop", category: "objects" },
+  { emoji: "⌚", label: "watch", category: "objects" },
+  { emoji: "🎧", label: "headphones", category: "objects" },
+  { emoji: "🎁", label: "gift", category: "objects" },
+  { emoji: "🛒", label: "cart", category: "objects" },
+  { emoji: "🚚", label: "delivery truck", category: "objects" },
+  { emoji: "🚀", label: "rocket", category: "objects" },
+  { emoji: "✈️", label: "airplane", category: "objects" },
+  { emoji: "🏠", label: "home", category: "objects" },
+  { emoji: "🏢", label: "office", category: "objects" },
+  { emoji: "⚽", label: "football", category: "objects" },
+  { emoji: "🏆", label: "trophy", category: "objects" },
+  { emoji: "☕", label: "coffee", category: "objects" },
+  { emoji: "🍕", label: "pizza", category: "objects" },
+  { emoji: "🎂", label: "birthday cake", category: "objects" },
+];
 const TEMPLATE_MESSAGES = [
   "Hello {{name}}, thanks for contacting Vaiket support.",
   "Your request has been received. Our team is reviewing it now.",
@@ -94,13 +183,29 @@ const QUICK_REPLIES = [
   "Thanks, we are checking this for you.",
   "Got it. I will connect you to support.",
 ];
-const VOICE_WAVE_HEIGHTS = [8, 10, 12, 9, 16, 10, 12, 8, 14, 9, 11, 8, 15, 10, 12, 9, 13, 8, 12, 9, 14, 10, 11, 8];
 const CONVERSATIONS_POLL_INTERVAL_MS = 12000;
 const MESSAGES_POLL_INTERVAL_MS = 10000;
 const INITIAL_MESSAGES_FETCH_LIMIT = 20;
 const MESSAGES_FETCH_BATCH_SIZE = 20;
 const MAX_MESSAGES_FETCH_LIMIT = 200;
 const LOCAL_CACHE_PREFIX = "vaiket_wa_inbox_v2";
+const EMOJI_RECENTS_KEY = `${LOCAL_CACHE_PREFIX}_emoji_recent`;
+const CHAT_WALLPAPER_STYLE = {
+  backgroundColor: "#efeae2",
+  backgroundImage: "url('/whatsapp-chat-pattern.svg')",
+  backgroundSize: "220px 220px",
+} as const;
+
+function uniqueEmojiList(items: Array<{ emoji: string; label: string }>) {
+  const seen = new Set<string>();
+  const next: Array<{ emoji: string; label: string }> = [];
+  for (const item of items) {
+    if (seen.has(item.emoji)) continue;
+    seen.add(item.emoji);
+    next.push(item);
+  }
+  return next;
+}
 
 type ConversationsCache = {
   accountId: string;
@@ -212,6 +317,10 @@ function conversationStatusClass(status: string) {
   if (value === "active") return "bg-emerald-500/15 text-emerald-700";
   if (value === "closed") return "bg-slate-500/15 text-slate-700";
   return "bg-indigo-500/15 text-indigo-700";
+}
+
+function normalizedConversationStatus(status: string) {
+  return status.trim().toLowerCase();
 }
 
 function formatChatTime(value: string | null | undefined) {
@@ -332,44 +441,63 @@ type ConversationListItemProps = {
   item: Conversation;
   active: boolean;
   onSelect: (id: string) => void;
+  showAccount: boolean;
 };
 
 const ConversationListItem = memo(function ConversationListItem({
   item,
   active,
   onSelect,
+  showAccount,
 }: ConversationListItemProps) {
+  const status = normalizedConversationStatus(item.status);
+  const preview = conversationPreview(item);
+
   return (
     <button
       onClick={() => onSelect(item.id)}
-      className={`w-full rounded-xl border px-3 py-2 text-left transition ${
+      className={`w-full rounded-xl border px-3 py-2.5 text-left transition ${
         active
-          ? "border-emerald-300 bg-emerald-50"
-          : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+          ? "border-[#d1d7db] bg-[#f0f2f5]"
+          : "border-transparent bg-transparent hover:border-[#e9edef] hover:bg-[#f8fafb]"
       }`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
-            {initials(item.contact.name, item.contact.phone)}
+      <div className="flex items-start gap-3">
+        <div
+          className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+            active
+              ? "bg-[#00a884] text-white"
+              : "bg-[#dfe5e7] text-[#54656f]"
+          }`}
+        >
+          {initials(item.contact.name, item.contact.phone)}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-medium text-[#111b21]">
+                  {item.contact.name || item.contact.phone}
+                </p>
+                <span className={`h-1.5 w-1.5 rounded-full ${status === "active" ? "bg-[#00a884]" : "bg-[#c7ced3]"}`} />
+              </div>
+              <p className="mt-1 truncate text-xs text-[#667781]">{preview}</p>
+            </div>
+
+            <div className="shrink-0 text-right">
+              <p className="text-[11px] font-medium text-[#667781]">{formatChatTime(item.lastMessageAt)}</p>
+              {showAccount ? (
+                <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-[#8696a0]">{item.account.name}</p>
+              ) : null}
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-900">
-              {item.contact.name || item.contact.phone}
-            </p>
-            <p className="truncate text-xs text-slate-500">{item.contact.phone}</p>
+
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <p className="truncate text-[11px] text-[#8696a0]">{item.contact.phone}</p>
+            {item.contact.optedIn ? <BadgeCheck className="h-3.5 w-3.5 text-[#00a884]" /> : null}
           </div>
         </div>
-        <p className="shrink-0 text-[11px] text-slate-500">{formatChatTime(item.lastMessageAt)}</p>
-      </div>
-      <p className="mt-1 truncate text-xs text-slate-600">{conversationPreview(item)}</p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${conversationStatusClass(item.status)}`}>
-          {item.status}
-        </span>
-        <span className="truncate text-[10px] text-slate-500">
-          {item.account.name} ({item.account.phoneNumber})
-        </span>
       </div>
     </button>
   );
@@ -383,12 +511,14 @@ export default function WhatsAppInboxPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [query, setQuery] = useState("");
+  const [conversationFilter, setConversationFilter] = useState<ConversationFilter>("all");
   const [mobileView, setMobileView] = useState<MobileView>("list");
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
+  const [refreshingInbox, setRefreshingInbox] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactMessage, setContactMessage] = useState<string | null>(null);
@@ -401,22 +531,20 @@ export default function WhatsAppInboxPage() {
   });
   const [contactFormConversationId, setContactFormConversationId] = useState("");
   const [chatSearch, setChatSearch] = useState("");
-  const [showHeaderSearch, setShowHeaderSearch] = useState(false);
-  const [showChatMenu, setShowChatMenu] = useState(false);
-  const [showAutomationMenu, setShowAutomationMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiSearch, setEmojiSearch] = useState("");
+  const [emojiCategory, setEmojiCategory] = useState<EmojiCategory>("recent");
+  const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [replyToId, setReplyToId] = useState<string | null>(null);
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
-  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
-  const [reactionsMap, setReactionsMap] = useState<Record<string, string[]>>({});
-  const [hiddenMessageIds, setHiddenMessageIds] = useState<string[]>([]);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const [chatNotice, setChatNotice] = useState<string | null>(null);
-  const [showTyping, setShowTyping] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<ComposerAttachment | null>(null);
   const [isPageVisible, setIsPageVisible] = useState(true);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerSelectionRef = useRef({ start: 0, end: 0 });
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const emojiToggleRef = useRef<HTMLButtonElement | null>(null);
   const attachmentRef = useRef<HTMLInputElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -444,30 +572,73 @@ export default function WhatsAppInboxPage() {
     [conversations, selectedConversationId]
   );
 
+  const emojiLabelLookup = useMemo(() => {
+    const next = new Map<string, string>();
+    for (const item of EMOJI_OPTIONS) {
+      if (!next.has(item.emoji)) next.set(item.emoji, item.label);
+    }
+    return next;
+  }, []);
+
+  const emojiPickerItems = useMemo(() => {
+    const query = emojiSearch.trim().toLowerCase();
+
+    if (query) {
+      const recentMatches = recentEmojis
+        .map((emoji) => ({ emoji, label: emojiLabelLookup.get(emoji) || "recent emoji" }))
+        .filter((item) => item.label.includes(query) || item.emoji.includes(query));
+
+      const optionMatches = EMOJI_OPTIONS
+        .filter((item) => item.label.includes(query) || item.emoji.includes(query))
+        .map((item) => ({ emoji: item.emoji, label: item.label }));
+
+      return uniqueEmojiList([...recentMatches, ...optionMatches]);
+    }
+
+    if (emojiCategory === "recent") {
+      return recentEmojis.map((emoji) => ({
+        emoji,
+        label: emojiLabelLookup.get(emoji) || "recent emoji",
+      }));
+    }
+
+    return EMOJI_OPTIONS
+      .filter((item) => item.category === emojiCategory)
+      .map((item) => ({ emoji: item.emoji, label: item.label }));
+  }, [emojiCategory, emojiLabelLookup, emojiSearch, recentEmojis]);
+
+  const deferredQuery = useDeferredValue(query);
+  const deferredChatSearch = useDeferredValue(chatSearch);
+
   const filteredConversations = useMemo(() => {
-    const value = query.trim().toLowerCase();
-    if (!value) return conversations;
+    const value = deferredQuery.trim().toLowerCase();
     return conversations.filter((item) => {
+      const status = normalizedConversationStatus(item.status);
+      const matchesFilter =
+        conversationFilter === "all"
+          ? true
+          : conversationFilter === "tagged"
+            ? item.contact.tags.length > 0
+            : status === conversationFilter;
+      if (!matchesFilter) return false;
+      if (!value) return true;
       const name = (item.contact.name || "").toLowerCase();
       const phone = item.contact.phone.toLowerCase();
       const account = item.account.name.toLowerCase();
       const preview = (item.messages[0]?.text || item.messages[0]?.messageType || "").toLowerCase();
       return name.includes(value) || phone.includes(value) || account.includes(value) || preview.includes(value);
     });
-  }, [conversations, query]);
-
-  const hiddenMessageIdSet = useMemo(() => new Set(hiddenMessageIds), [hiddenMessageIds]);
+  }, [conversations, conversationFilter, deferredQuery]);
 
   const visibleMessages = useMemo(() => {
-    const withoutDeleted = messages.filter((item) => !hiddenMessageIdSet.has(item.id));
-    const needle = chatSearch.trim().toLowerCase();
-    if (!needle) return withoutDeleted;
-    return withoutDeleted.filter((item) => {
+    const needle = deferredChatSearch.trim().toLowerCase();
+    if (!needle) return messages;
+    return messages.filter((item) => {
       const textValue = (item.text || "").toLowerCase();
       const typeValue = item.messageType.toLowerCase();
       return textValue.includes(needle) || typeValue.includes(needle);
     });
-  }, [messages, hiddenMessageIdSet, chatSearch]);
+  }, [deferredChatSearch, messages]);
 
   const chatRows = useMemo(() => buildChatRows(visibleMessages), [visibleMessages]);
 
@@ -478,11 +649,71 @@ export default function WhatsAppInboxPage() {
 
   const chatStatusText = useMemo(() => {
     if (!selectedConversation) return "";
-    if (showTyping) return "Customer is typing...";
     if (selectedConversation.status.trim().toLowerCase() === "active") return "online";
     const stamp = formatChatTime(selectedConversation.lastMessageAt);
     return stamp ? `last seen ${stamp}` : "offline";
-  }, [selectedConversation, showTyping]);
+  }, [selectedConversation]);
+
+  const scopedConversationStats = useMemo(() => {
+    return conversations.reduce(
+      (acc, item) => {
+        const status = normalizedConversationStatus(item.status);
+        acc.total += 1;
+        if (status === "active") acc.active += 1;
+        if (status === "closed") acc.closed += 1;
+        if (item.contact.tags.length > 0) acc.tagged += 1;
+        if (item.contact.optedIn) acc.optedIn += 1;
+        return acc;
+      },
+      { total: 0, active: 0, closed: 0, tagged: 0, optedIn: 0 }
+    );
+  }, [conversations]);
+
+  const conversationFilterOptions = useMemo(
+    () => [
+      { value: "all" as const, label: "All", count: scopedConversationStats.total },
+      { value: "active" as const, label: "Active", count: scopedConversationStats.active },
+      { value: "closed" as const, label: "Closed", count: scopedConversationStats.closed },
+      { value: "tagged" as const, label: "Tagged", count: scopedConversationStats.tagged },
+    ],
+    [scopedConversationStats]
+  );
+
+  const selectedConversationStats = useMemo(() => {
+    if (!selectedConversation) {
+      return {
+        mediaMessages: 0,
+        outboundMessages: 0,
+        inboundMessages: 0,
+        lastActivityLabel: "-",
+        tags: [] as string[],
+        latestPreview: "-",
+      };
+    }
+    const mediaMessages = messages.filter(
+      (item) => Boolean(item.mediaUrl) || item.messageType.trim().toLowerCase() !== "text"
+    ).length;
+    return {
+      mediaMessages,
+      outboundMessages: messages.filter((item) => item.direction === "outbound").length,
+      inboundMessages: messages.filter((item) => item.direction !== "outbound").length,
+      lastActivityLabel: formatChatTime(selectedConversation.lastMessageAt) || "-",
+      tags: selectedConversation.contact.tags,
+      latestPreview: conversationPreview(selectedConversation),
+    };
+  }, [messages, selectedConversation]);
+
+  const profileDetailCards = useMemo(() => {
+    if (!selectedConversation) return [];
+    return [
+      { label: "Source", value: selectedConversation.contact.source || "manual" },
+      { label: "Account", value: selectedConversation.account.name },
+      { label: "Last active", value: selectedConversationStats.lastActivityLabel },
+      { label: "Inbound", value: selectedConversationStats.inboundMessages },
+      { label: "Outbound", value: selectedConversationStats.outboundMessages },
+      { label: "Media", value: selectedConversationStats.mediaMessages },
+    ];
+  }, [selectedConversation, selectedConversationStats]);
 
   const loadAccounts = useCallback(async () => {
     try {
@@ -533,7 +764,7 @@ export default function WhatsAppInboxPage() {
         const nextSelectedConversationId =
           activeConversationId && next.some((item) => item.id === activeConversationId)
             ? activeConversationId
-            : "";
+            : next[0]?.id || "";
 
         if (digest !== conversationDigestRef.current) {
           conversationDigestRef.current = digest;
@@ -629,6 +860,20 @@ export default function WhatsAppInboxPage() {
     []
   );
 
+  const refreshInbox = useCallback(async () => {
+    setRefreshingInbox(true);
+    try {
+      await Promise.all([
+        loadConversations({ force: true }),
+        selectedConversationIdRef.current
+          ? loadMessages(selectedConversationIdRef.current, { force: true })
+          : Promise.resolve(),
+      ]);
+    } finally {
+      setRefreshingInbox(false);
+    }
+  }, [loadConversations, loadMessages]);
+
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
@@ -658,6 +903,26 @@ export default function WhatsAppInboxPage() {
   }, [selectedAccountId]);
 
   useEffect(() => {
+    try {
+      const cachedRecents = safeParseJson<string[]>(localStorage.getItem(EMOJI_RECENTS_KEY));
+      if (!Array.isArray(cachedRecents)) return;
+      const cleaned = cachedRecents.filter((item): item is string => typeof item === "string");
+      setRecentEmojis(cleaned.slice(0, 30));
+      if (cleaned.length > 0) setEmojiCategory("recent");
+    } catch {
+      // ignore cache read failures
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(EMOJI_RECENTS_KEY, JSON.stringify(recentEmojis.slice(0, 30)));
+    } catch {
+      // ignore cache write failures
+    }
+  }, [recentEmojis]);
+
+  useEffect(() => {
     if (hydratedAccountCacheRef.current.has(selectedAccountId)) return;
     hydratedAccountCacheRef.current.add(selectedAccountId);
     try {
@@ -667,7 +932,9 @@ export default function WhatsAppInboxPage() {
       if (!cached || cached.accountId !== selectedAccountId || cached.conversations.length === 0) return;
       conversationDigestRef.current = buildConversationsDigest(cached.conversations);
       setConversations(cached.conversations);
-      setSelectedConversationId((prev) => prev || cached.selectedConversationId || "");
+      setSelectedConversationId(
+        (prev) => prev || cached.selectedConversationId || cached.conversations[0]?.id || ""
+      );
       setLoadingConversations(false);
     } catch {
       // ignore cache read failures
@@ -778,21 +1045,6 @@ export default function WhatsAppInboxPage() {
   }, [isPageVisible, loadConversations, loadMessages]);
 
   useEffect(() => {
-    if (!selectedConversation || !isPageVisible || selectedConversation.status.trim().toLowerCase() !== "active") return;
-    const timer = window.setInterval(() => {
-      setShowTyping(true);
-      window.setTimeout(() => setShowTyping(false), 1800);
-    }, 14000);
-    return () => window.clearInterval(timer);
-  }, [selectedConversation, isPageVisible]);
-
-  useEffect(() => {
-    if (!chatNotice) return;
-    const timer = window.setTimeout(() => setChatNotice(null), 2600);
-    return () => window.clearTimeout(timer);
-  }, [chatNotice]);
-
-  useEffect(() => {
     if (!previewImageUrl) return;
     const onEsc = (event: KeyboardEvent) => {
       if (event.key === "Escape") setPreviewImageUrl(null);
@@ -808,12 +1060,40 @@ export default function WhatsAppInboxPage() {
       messageScrollRef.current.scrollTop = messageScrollRef.current.scrollHeight;
     }
     previousConversationIdRef.current = selectedConversationId;
-  }, [selectedConversationId, visibleMessages.length, showTyping]);
+  }, [selectedConversationId, visibleMessages.length]);
 
   useEffect(() => {
     if (!pendingAttachment?.previewUrl) return;
     return () => URL.revokeObjectURL(pendingAttachment.previewUrl);
   }, [pendingAttachment?.previewUrl]);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+
+    const onPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (emojiPickerRef.current?.contains(target)) return;
+      if (emojiToggleRef.current?.contains(target)) return;
+      setShowEmojiPicker(false);
+      setEmojiSearch("");
+    };
+
+    const onEsc = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setShowEmojiPicker(false);
+      setEmojiSearch("");
+    };
+
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("touchstart", onPointerDown);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("touchstart", onPointerDown);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, [showEmojiPicker]);
 
   useEffect(() => {
     return () => {
@@ -971,48 +1251,76 @@ export default function WhatsAppInboxPage() {
     setShowEmojiPicker(false);
   };
 
-  const onForwardMessage = (message: Message) => {
-    const content = message.text || message.mediaUrl || "";
-    setText((prev) => (prev ? `${prev}\n${content}` : content));
-    setChatNotice("Message content copied to composer for forwarding.");
-  };
-
   const onCopyMessage = async (message: Message) => {
     const content = message.text || message.mediaUrl || "";
     if (!content) return;
     try {
       await navigator.clipboard.writeText(content);
-      setChatNotice("Message copied.");
     } catch {
-      setChatNotice("Unable to copy message.");
+      // ignore clipboard failures in unsupported browsers
     }
-  };
-
-  const onDeleteMessageLocal = (messageId: string) => {
-    setHiddenMessageIds((prev) => (prev.includes(messageId) ? prev : [...prev, messageId]));
-    setReactionPickerFor(null);
-  };
-
-  const onReactMessage = (messageId: string, emoji: string) => {
-    setReactionsMap((prev) => ({
-      ...prev,
-      [messageId]: Array.from(new Set([...(prev[messageId] || []), emoji])),
-    }));
-    setReactionPickerFor(null);
   };
 
   const onApplyTemplate = (template: string) => {
     setText(template);
     setShowTemplateMenu(false);
+    setShowEmojiPicker(false);
+    window.requestAnimationFrame(() => {
+      if (!composerTextareaRef.current) return;
+      const cursor = template.length;
+      composerTextareaRef.current.focus();
+      composerTextareaRef.current.setSelectionRange(cursor, cursor);
+      composerSelectionRef.current = { start: cursor, end: cursor };
+    });
   };
 
   const onApplyQuickReply = (reply: string) => {
     setText(reply);
     setShowQuickReplies(false);
+    setShowEmojiPicker(false);
+    window.requestAnimationFrame(() => {
+      if (!composerTextareaRef.current) return;
+      const cursor = reply.length;
+      composerTextareaRef.current.focus();
+      composerTextareaRef.current.setSelectionRange(cursor, cursor);
+      composerSelectionRef.current = { start: cursor, end: cursor };
+    });
+  };
+
+  const rememberComposerSelection = () => {
+    if (!composerTextareaRef.current) return;
+    composerSelectionRef.current = {
+      start: composerTextareaRef.current.selectionStart ?? 0,
+      end: composerTextareaRef.current.selectionEnd ?? 0,
+    };
   };
 
   const onInsertEmoji = (emoji: string) => {
-    setText((prev) => `${prev}${emoji}`);
+    const textarea = composerTextareaRef.current;
+    const isFocused = typeof document !== "undefined" && document.activeElement === textarea;
+    const baseStart = isFocused
+      ? (textarea?.selectionStart ?? composerSelectionRef.current.start)
+      : composerSelectionRef.current.start;
+    const baseEnd = isFocused
+      ? (textarea?.selectionEnd ?? composerSelectionRef.current.end)
+      : composerSelectionRef.current.end;
+
+    let nextCursor = baseStart + emoji.length;
+    setText((prev) => {
+      const safeStart = Math.max(0, Math.min(baseStart, prev.length));
+      const safeEnd = Math.max(safeStart, Math.min(baseEnd, prev.length));
+      nextCursor = safeStart + emoji.length;
+      return `${prev.slice(0, safeStart)}${emoji}${prev.slice(safeEnd)}`;
+    });
+
+    setRecentEmojis((prev) => [emoji, ...prev.filter((item) => item !== emoji)].slice(0, 30));
+
+    window.requestAnimationFrame(() => {
+      if (!textarea) return;
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+      composerSelectionRef.current = { start: nextCursor, end: nextCursor };
+    });
   };
 
   const onAttachmentSelect = (file?: File | null) => {
@@ -1034,58 +1342,23 @@ export default function WhatsAppInboxPage() {
     setShowEmojiPicker(false);
     setShowTemplateMenu(false);
     setShowQuickReplies(false);
-    setChatNotice(`Attached ${file.name}`);
   };
 
-  const onChatMenuAction = (action: string) => {
+  const onExportConversation = () => {
     if (!selectedConversation) return;
-    if (action === "export") {
-      const lines = visibleMessages.map((msg) => {
-        const who = msg.direction === "outbound" ? "Agent" : selectedConversation.contact.name || selectedConversation.contact.phone;
-        const body = msg.text || `[${msg.messageType}]`;
-        const media = msg.mediaUrl ? ` (media: ${msg.mediaUrl})` : "";
-        return `[${new Date(msg.createdAt).toLocaleString()}] ${who}: ${body}${media}`;
-      });
-      const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `conversation-${selectedConversation.contact.phone}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setChatNotice("Conversation exported.");
-    } else if (action === "resolved") {
-      setChatNotice("Conversation marked as resolved.");
-    } else if (action === "block") {
-      setChatNotice("Contact blocked locally for this session.");
-    } else if (action === "assign") {
-      setChatNotice("Assign agent action opened.");
-    } else if (action === "tag") {
-      setChatNotice("Add tag action opened.");
-    }
-    setShowChatMenu(false);
-  };
-
-  const onAutomationAction = (action: string) => {
-    setShowAutomationMenu(false);
-    if (action === "template") {
-      setShowTemplateMenu(true);
-      setShowQuickReplies(false);
-      return;
-    }
-    if (action === "tag") {
-      setMobileView("profile");
-      setChatNotice("Use tags in the contact panel.");
-      return;
-    }
-    if (action === "assign") {
-      setShowChatMenu(true);
-      setChatNotice("Use menu > Assign agent.");
-      return;
-    }
-    if (action === "workflow") {
-      setChatNotice("Workflow trigger queued.");
-    }
+    const lines = visibleMessages.map((msg) => {
+      const who = msg.direction === "outbound" ? "Agent" : selectedConversation.contact.name || selectedConversation.contact.phone;
+      const body = msg.text || `[${msg.messageType}]`;
+      const media = msg.mediaUrl ? ` (media: ${msg.mediaUrl})` : "";
+      return `[${new Date(msg.createdAt).toLocaleString()}] ${who}: ${body}${media}`;
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `conversation-${selectedConversation.contact.phone}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const selectConversation = useCallback(
@@ -1093,16 +1366,11 @@ export default function WhatsAppInboxPage() {
       clearPendingAttachment();
       shouldStickToBottomRef.current = true;
       setMobileView("chat");
-      setShowChatMenu(false);
-      setShowAutomationMenu(false);
       setShowEmojiPicker(false);
       setShowTemplateMenu(false);
       setShowQuickReplies(false);
       setReplyToId(null);
       setChatSearch("");
-      setHiddenMessageIds([]);
-      setReactionsMap({});
-      setChatNotice(null);
 
       if (id === selectedConversationIdRef.current) return;
 
@@ -1117,159 +1385,193 @@ export default function WhatsAppInboxPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm md:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">WhatsApp Inbox</h1>
-            <p className="mt-1 text-sm text-slate-600">Shared inbox with guarded live sync and instant chat switching.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                isPageVisible ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-              }`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${isPageVisible ? "bg-emerald-500" : "bg-amber-500"}`} />
-              {isPageVisible ? "Live sync" : "Sync paused"}
-            </span>
+    <div className="mx-auto max-w-[1680px] space-y-4 pb-24 lg:pb-8">
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d1d7db] bg-[#f0f2f5] px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-[#111b21]">WhatsApp</p>
+          <span className={`h-2 w-2 rounded-full ${isPageVisible ? "bg-[#00a884]" : "bg-amber-500"}`} />
+          <p className="text-xs text-[#667781]">{isPageVisible ? "Connected" : "Sync paused"}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center rounded-full border border-[#d1d7db] bg-white px-3 py-1.5 text-xs text-[#54656f]">
+            <span className="mr-2 hidden sm:inline">Device</span>
             <select
               value={selectedAccountId}
               onChange={(event) => setSelectedAccountId(event.target.value)}
-              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700"
+              className="bg-transparent text-xs outline-none"
             >
-              <option value="all">All Devices</option>
+              <option value="all">All devices</option>
               {accounts.map((account) => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.phoneNumber})
+                  {account.name}
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              onClick={() => void loadConversations({ force: true })}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <RefreshCcw className="h-4 w-4" />
-              Refresh
-            </button>
-            <Link
-              href="/dashboard/whatsapp"
-              className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              Back to Hub
-            </Link>
-          </div>
+          </label>
+          <button
+            type="button"
+            onClick={() => void refreshInbox()}
+            disabled={refreshingInbox}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d1d7db] bg-white text-[#54656f] transition hover:bg-[#f5f6f6] disabled:cursor-not-allowed disabled:opacity-70"
+            title={refreshingInbox ? "Refreshing" : "Refresh"}
+          >
+            <RefreshCcw className={`h-4 w-4 ${refreshingInbox ? "animate-spin" : ""}`} />
+          </button>
+          <Link
+            href="/dashboard/whatsapp"
+            className="inline-flex items-center rounded-full border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-medium text-[#54656f] transition hover:bg-[#f5f6f6]"
+          >
+            Back
+          </Link>
         </div>
       </section>
 
       {error ? (
-        <section className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-sm">
-          {error}
+        <section className="rounded-2xl border border-rose-200 bg-rose-50/95 px-4 py-3 text-sm text-rose-700 shadow-sm">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
         </section>
       ) : null}
 
-      <section className="grid min-h-[72vh] grid-cols-1 gap-4 lg:grid-cols-[330px_minmax(0,1fr)_340px]">
+      <section className="grid min-h-[74vh] grid-cols-1 overflow-hidden rounded-xl border border-[#d1d7db] bg-white shadow-sm lg:grid-cols-[360px_minmax(0,1fr)]">
         <aside
-          className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
+          className={`overflow-hidden bg-white ${
             mobileView === "list" ? "block" : "hidden"
-          } lg:block`}
+          } lg:block lg:border-r lg:border-[#d1d7db]`}
         >
-          <div className="border-b border-slate-200 p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-base font-semibold text-slate-900">Conversations</h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+          <div className="border-b border-[#d1d7db] bg-[#f0f2f5] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-medium text-[#111b21]">Chats</h2>
+                <p className="mt-1 text-xs text-[#667781]">
+                  {filteredConversations.length} chats
+                </p>
+              </div>
+              <span className="inline-flex h-8 min-w-8 items-center justify-center rounded-full bg-white px-2.5 text-xs font-semibold text-[#54656f]">
                 {filteredConversations.length}
               </span>
             </div>
+
             <div className="relative mt-3">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8696a0]" />
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search chats"
-                className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400"
+                placeholder="Search or start a new chat"
+                className="w-full rounded-lg border border-[#d1d7db] bg-white py-2.5 pl-10 pr-3 text-sm text-[#111b21] outline-none transition focus:border-[#00a884]"
               />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {conversationFilterOptions.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setConversationFilter(item.value)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                    conversationFilter === item.value
+                      ? "border-[#00a884]/30 bg-[#e7fce3] text-[#008069]"
+                      : "border-[#d1d7db] bg-white text-[#54656f] hover:bg-[#f5f6f6]"
+                  }`}
+                >
+                  {item.label}
+                  <span className="rounded-full bg-[#f0f2f5] px-1.5 py-0.5 text-[10px] text-[#667781]">
+                    {item.count}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
 
-          <div className="max-h-[64vh] space-y-1 overflow-y-auto p-2">
+          <div className="max-h-[72vh] space-y-1.5 overflow-y-auto bg-white p-2.5">
             {loadingConversations ? (
-              <div className="space-y-2 px-2 py-2">
+              <div className="space-y-2 py-1">
                 {Array.from({ length: 6 }).map((_, idx) => (
                   <div
                     key={`conversation_skeleton_${idx}`}
-                    className="animate-pulse rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+                    className="animate-pulse rounded-2xl border border-slate-200 bg-white/80 px-3 py-3"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="h-9 w-9 rounded-full bg-slate-200" />
-                      <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-3">
+                      <span className="h-11 w-11 rounded-full bg-slate-200" />
+                      <div className="flex-1 space-y-2">
                         <span className="block h-3 w-28 rounded bg-slate-200" />
-                        <span className="block h-2.5 w-20 rounded bg-slate-200" />
+                        <span className="block h-2.5 w-40 rounded bg-slate-200" />
+                        <span className="block h-2.5 w-24 rounded bg-slate-200" />
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : filteredConversations.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-300 px-3 py-3 text-sm text-slate-500">
-                No conversations found.
-              </p>
+              <div className="rounded-[24px] border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center">
+                <MessageSquareText className="mx-auto h-10 w-10 text-slate-300" />
+                <p className="mt-3 text-sm font-semibold text-slate-700">No conversations found</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Try another search term or switch the status filter.
+                </p>
+              </div>
             ) : (
-              filteredConversations.map((item) => {
-                return (
-                  <ConversationListItem
-                    key={item.id}
-                    item={item}
-                    active={selectedConversationId === item.id}
-                    onSelect={selectConversation}
-                  />
-                );
-              })
+              filteredConversations.map((item) => (
+                <ConversationListItem
+                  key={item.id}
+                  item={item}
+                  active={selectedConversationId === item.id}
+                  onSelect={selectConversation}
+                  showAccount={selectedAccountId === "all" && accounts.length > 1}
+                />
+              ))
             )}
           </div>
         </aside>
 
         <main
-          className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
-            mobileView === "chat" ? "block" : "hidden"
-          } lg:flex`}
+          className={`overflow-hidden bg-[#efeae2] ${
+            mobileView === "chat" ? "flex" : "hidden"
+          } ${mobileView === "profile" ? "lg:hidden" : "lg:flex"}`}
         >
           {!selectedConversation ? (
-            <div className="flex min-h-[62vh] w-full items-center justify-center p-6 text-center">
-              <div>
-                <p className="text-base font-semibold text-slate-700">Select a conversation</p>
-                <p className="mt-1 text-sm text-slate-500">Open any chat to start messaging.</p>
+            <div className="flex min-h-[68vh] w-full items-center justify-center bg-[#efeae2] p-6 text-center">
+              <div className="max-w-md">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-emerald-700 shadow-sm">
+                  <MessageSquareText className="h-8 w-8" />
+                </div>
+                <p className="mt-4 text-lg font-semibold text-slate-800">Open a conversation</p>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Pick any thread from the left to see message history, customer details, and the reply composer.
+                </p>
               </div>
             </div>
           ) : (
             <div className="flex w-full flex-col">
-              <header className="border-b border-slate-200 bg-white/95 px-4 py-3">
-                <div className="flex items-center justify-between gap-3">
+              <header className="border-b border-[#d1d7db] bg-[#f0f2f5] px-4 py-2.5 md:px-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <button
                       type="button"
                       onClick={() => setMobileView("list")}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-600 lg:hidden"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1d7db] bg-white text-[#54656f] lg:hidden"
                     >
                       <ArrowLeft className="h-4 w-4" />
                     </button>
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-700">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
                       {initials(selectedConversation.contact.name, selectedConversation.contact.phone)}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">
+                      <p className="truncate text-sm font-medium text-[#111b21]">
                         {selectedConversation.contact.name || selectedConversation.contact.phone}
                       </p>
-                      <p className="truncate text-xs text-slate-500">
-                        {selectedConversation.contact.phone}
-                        <span className="mx-1.5">•</span>
+                      <p className="truncate text-xs text-[#667781]">
+                        {selectedConversation.account.name}
+                        <span className="mx-2 text-[#c7ced3]">|</span>
                         <span className="inline-flex items-center gap-1">
                           <span
                             className={`h-1.5 w-1.5 rounded-full ${
-                              showTyping || selectedConversation.status.trim().toLowerCase() === "active"
-                                ? "bg-emerald-500"
-                                : "bg-slate-400"
+                              selectedConversation.status.trim().toLowerCase() === "active"
+                                ? "bg-[#00a884]"
+                                : "bg-[#8696a0]"
                             }`}
                           />
                           {chatStatusText}
@@ -1278,88 +1580,76 @@ export default function WhatsAppInboxPage() {
                     </div>
                   </div>
 
-                  <div className="relative flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setShowHeaderSearch((prev) => !prev)}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
-                      title="Search conversation"
-                    >
-                      <Search className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
-                      title="Call"
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={`tel:${selectedConversation.contact.phone}`}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1d7db] bg-white text-[#54656f] transition hover:bg-[#f5f6f6]"
+                      title="Call contact"
                     >
                       <PhoneCall className="h-4 w-4" />
-                    </button>
+                    </a>
                     <button
                       type="button"
-                      onClick={() => {
-                        setShowChatMenu((prev) => !prev);
-                        setShowAutomationMenu(false);
-                      }}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50"
-                      title="More actions"
+                      onClick={onExportConversation}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1d7db] bg-white text-[#54656f] transition hover:bg-[#f5f6f6]"
+                      title="Export conversation"
                     >
-                      <MoreVertical className="h-4 w-4" />
+                      <FileText className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => setMobileView("profile")}
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 text-slate-600 hover:bg-slate-50 lg:hidden"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1d7db] bg-white text-[#54656f] transition hover:bg-[#f5f6f6]"
                     >
                       <UserCircle2 className="h-4 w-4" />
                     </button>
-
-                    {showChatMenu ? (
-                      <div className="absolute right-0 top-11 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                        <button onClick={() => onChatMenuAction("assign")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Assign agent</button>
-                        <button onClick={() => onChatMenuAction("tag")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Add tag</button>
-                        <button onClick={() => onChatMenuAction("resolved")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Mark as resolved</button>
-                        <button onClick={() => onChatMenuAction("export")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Export conversation</button>
-                        <button onClick={() => onChatMenuAction("block")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-rose-600 hover:bg-rose-50">Block contact</button>
-                      </div>
-                    ) : null}
                   </div>
                 </div>
 
-                {showHeaderSearch ? (
-                  <div className="mt-3">
-                    <input
-                      value={chatSearch}
-                      onChange={(event) => setChatSearch(event.target.value)}
-                      placeholder="Search within conversation..."
-                      className="h-9 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-700"
-                    />
-                  </div>
-                ) : null}
+                <div className="relative mt-2">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8696a0]" />
+                  <input
+                    value={chatSearch}
+                    onChange={(event) => setChatSearch(event.target.value)}
+                    placeholder="Search in chat"
+                    className="h-9 w-full rounded-lg border border-[#d1d7db] bg-white pl-10 pr-3 text-sm text-[#111b21] outline-none transition focus:border-[#00a884]"
+                  />
+                </div>
               </header>
 
-              <div className="relative flex-1 overflow-hidden">
-                <div className="absolute inset-0 bg-[#efeae2]" />
-                <div className="absolute inset-0 opacity-40 [background-size:36px_36px] [background-image:radial-gradient(circle_at_1px_1px,rgba(100,116,139,0.12)_1px,transparent_0)]" />
+              <div className="flex-1 overflow-hidden bg-[#efeae2]">
                 <div
                   ref={messageScrollRef}
                   onScroll={onMessagesScroll}
-                  className="relative h-[56vh] max-h-[56vh] overflow-y-auto px-3 py-4 md:px-6"
+                  className="h-[56vh] max-h-[56vh] overflow-y-auto px-3 py-4 md:h-[60vh] md:max-h-[60vh] md:px-6 md:py-6"
+                  style={CHAT_WALLPAPER_STYLE}
                 >
                   {loadingMessages ? (
-                    <div className="space-y-3 py-2">
+                    <div className="mx-auto max-w-4xl space-y-3 py-2">
                       {Array.from({ length: 8 }).map((_, idx) => (
                         <div key={`message_skeleton_${idx}`} className={`flex ${idx % 2 === 0 ? "justify-start" : "justify-end"}`}>
-                          <span className="h-12 w-44 animate-pulse rounded-2xl bg-white/70 shadow-sm" />
+                          <span className="h-14 w-48 animate-pulse rounded-[22px] bg-white/80 shadow-sm" />
                         </div>
                       ))}
                     </div>
                   ) : chatRows.length === 0 ? (
-                    <p className="text-sm text-slate-500">No messages in this conversation.</p>
+                    <div className="flex h-full min-h-[38vh] items-center justify-center text-center">
+                      <div className="max-w-sm rounded-[24px] border border-slate-200 bg-white/95 px-5 py-8 shadow-sm">
+                        <p className="text-base font-semibold text-slate-800">
+                          {chatSearch ? "No matching messages" : "No messages in this conversation"}
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-slate-500">
+                          {chatSearch
+                            ? "Clear the in-thread search to see the full history again."
+                            : "Send the first reply from the composer below to start this thread."}
+                        </p>
+                      </div>
+                    </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="mx-auto max-w-4xl space-y-2.5">
                       {loadingOlderMessages ? (
                         <div className="flex justify-center py-1">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm">
                             <Loader2 className="h-3 w-3 animate-spin" />
                             Loading older messages...
                           </span>
@@ -1369,7 +1659,7 @@ export default function WhatsAppInboxPage() {
                         if (row.kind === "separator") {
                           return (
                             <div key={row.id} className="flex justify-center py-1">
-                              <span className="rounded-full bg-slate-200/90 px-3 py-1 text-[11px] font-medium text-slate-600">
+                              <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-600 shadow-sm">
                                 {row.label}
                               </span>
                             </div>
@@ -1389,229 +1679,305 @@ export default function WhatsAppInboxPage() {
                           if (mediaUrl && raw.replace(mediaUrl, "").trim() === "") return "";
                           return raw;
                         })();
-                        const reactions = reactionsMap[msg.id] || [];
                         return (
-                          <div
-                            key={msg.id}
-                            className={`group flex ${outbound ? "justify-end" : "justify-start"}`}
-                            onMouseEnter={() => setHoveredMessageId(msg.id)}
-                            onMouseLeave={() => {
-                              setHoveredMessageId((prev) => (prev === msg.id ? null : prev));
-                              setReactionPickerFor((prev) => (prev === msg.id ? null : prev));
-                            }}
-                          >
-                            <div className="relative max-w-[90%] md:max-w-[74%]">
-                              {hoveredMessageId === msg.id ? (
-                                <div className={`absolute top-1 z-10 flex items-center gap-1 ${outbound ? "-left-44" : "-right-44"}`}>
-                                  <button onClick={() => onReplyMessage(msg.id)} className="rounded-lg border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100" title="Reply"><Reply className="h-3.5 w-3.5" /></button>
-                                  <button onClick={() => onForwardMessage(msg)} className="rounded-lg border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100" title="Forward"><Forward className="h-3.5 w-3.5" /></button>
-                                  <button onClick={() => setReactionPickerFor((prev) => (prev === msg.id ? null : msg.id))} className="rounded-lg border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100" title="React"><SmilePlus className="h-3.5 w-3.5" /></button>
-                                  <button onClick={() => void onCopyMessage(msg)} className="rounded-lg border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100" title="Copy"><Copy className="h-3.5 w-3.5" /></button>
-                                  <button onClick={() => onDeleteMessageLocal(msg.id)} className="rounded-lg border border-rose-300 bg-white p-1 text-rose-600 hover:bg-rose-50" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
-                                </div>
-                              ) : null}
-
-                              <div className={`rounded-2xl px-3 py-2 text-sm shadow-sm ${outbound ? "rounded-br-md bg-[#dcf8c6] text-slate-900" : "rounded-bl-md border border-slate-200 bg-white text-slate-900"}`}>
+                          <div key={msg.id} className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
+                            <div className="max-w-[88%] md:max-w-[68%]">
+                              <div
+                                className={`inline-block w-fit max-w-full rounded-[9px] px-2.5 py-1.5 text-[14px] leading-[1.45] ${
+                                  outbound
+                                    ? "bg-[#d9fdd3] text-[#111b21]"
+                                    : "bg-white text-[#111b21]"
+                                }`}
+                              >
                                 {showImage && mediaUrl ? (
-                                  <button type="button" onClick={() => setPreviewImageUrl(mediaUrl)} className="block overflow-hidden rounded-xl border border-slate-200">
+                                  <button type="button" onClick={() => setPreviewImageUrl(mediaUrl)} className="block overflow-hidden rounded-2xl border border-slate-200">
                                     <img src={mediaUrl} alt="attachment" className="max-h-60 w-full object-cover" />
                                   </button>
                                 ) : null}
 
                                 {showVideo && mediaUrl ? (
-                                  <a href={mediaUrl} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                                  <a href={mediaUrl} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-700">
                                     <Video className="h-4 w-4 text-indigo-600" />
                                     <span>Open video attachment</span>
                                   </a>
                                 ) : null}
 
                                 {showDoc && mediaUrl ? (
-                                  <a href={mediaUrl} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                                  <a href={mediaUrl} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-xs text-slate-700">
                                     <FileText className="h-4 w-4 text-blue-600" />
-                                    <span>Open document/PDF</span>
+                                    <span>Open document or PDF</span>
                                   </a>
                                 ) : null}
 
                                 {showVoice && mediaUrl ? (
-                                  <div className="mt-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                                    <div className="mb-2 flex items-center gap-2 text-xs text-slate-700">
-                                      <PlayCircle className="h-4 w-4 text-slate-500" />
-                                      <span>Voice note</span>
-                                    </div>
-                                    <div className="mb-2 flex items-end gap-1">
-                                      {VOICE_WAVE_HEIGHTS.map((height, idx) => (
-                                        <span
-                                          key={`${msg.id}_wave_${idx}`}
-                                          className="w-1 rounded bg-slate-300"
-                                          style={{ height: `${height}px` }}
-                                        />
-                                      ))}
-                                    </div>
+                                  <div className="mt-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                                    <p className="mb-2 text-xs font-medium text-slate-600">Voice note</p>
                                     <audio controls className="h-8 w-full">
                                       <source src={mediaUrl} />
                                     </audio>
                                   </div>
                                 ) : null}
 
-                                {(!showImage && !showVideo && !showDoc && !showVoice) || captionText ? (
-                                  <p className={`whitespace-pre-wrap break-words ${showImage || showVideo || showDoc || showVoice ? "mt-2" : ""}`}>
+                                {!showImage && !showVideo && !showDoc && !showVoice ? (
+                                  <p className="whitespace-pre-wrap break-words leading-[1.45]">
                                     {captionText || "-"}
                                   </p>
+                                ) : captionText ? (
+                                  <p className="mt-1.5 whitespace-pre-wrap break-words leading-[1.45]">{captionText}</p>
                                 ) : null}
 
-                                <div className="mt-1 flex items-center justify-end gap-1.5 text-[11px] text-slate-500">
+                                <div className="mt-1.5 flex items-center justify-end gap-1 text-[11px] text-[#667781]">
                                   <span>{formatChatTime(msg.createdAt)}</span>
                                   {outbound ? <OutboundStatus status={msg.status} /> : null}
                                 </div>
                               </div>
-
-                              {reactionPickerFor === msg.id ? (
-                                <div className="mt-1 flex flex-wrap gap-1 rounded-full border border-slate-200 bg-white px-2 py-1 shadow-sm">
-                                  {MESSAGE_REACTIONS.map((emoji) => (
-                                    <button key={`${msg.id}_${emoji}`} onClick={() => onReactMessage(msg.id, emoji)} className="text-sm hover:scale-110">
-                                      {emoji}
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : null}
-
-                              {reactions.length > 0 ? (
-                                <div className={`mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs ${outbound ? "ml-auto" : ""}`}>
-                                  {reactions.map((emoji, idx) => (
-                                    <span key={`${msg.id}_reaction_${idx}`}>{emoji}</span>
-                                  ))}
-                                </div>
-                              ) : null}
+                              <div className={`mt-1 hidden items-center gap-2 text-[11px] ${outbound ? "justify-end" : "justify-start"}`}>
+                                <button type="button" onClick={() => onReplyMessage(msg.id)}>
+                                  Reply
+                                </button>
+                                <button type="button" onClick={() => void onCopyMessage(msg)}>
+                                  Copy
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
                       })}
 
-                      {showTyping ? (
-                        <div className="flex justify-start">
-                          <div className="rounded-2xl rounded-bl-md border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                            <p className="text-xs text-slate-500">Customer is typing...</p>
-                            <div className="mt-1 flex items-center gap-1">
-                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.2s]" />
-                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.1s]" />
-                              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" />
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
                     </div>
                   )}
                 </div>
               </div>
 
-              <footer className="border-t border-slate-200 bg-white px-3 py-3 md:px-4">
-                {chatNotice ? (
-                  <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
-                    {chatNotice}
-                  </div>
-                ) : null}
-
-                {replyToMessage ? (
-                  <div className="mb-2 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-700">Replying to</p>
-                      <p className="truncate text-slate-500">{replyToMessage.text || `[${replyToMessage.messageType}]`}</p>
-                    </div>
-                    <button onClick={() => setReplyToId(null)} className="rounded-md px-2 py-1 text-slate-500 hover:bg-slate-200">Clear</button>
-                  </div>
-                ) : null}
-
-                {pendingAttachment ? (
-                  <div className="mb-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                    <div className="mb-2 flex items-center justify-between gap-2 text-xs text-slate-600">
-                      <p className="truncate">
-                        Attached {pendingAttachment.mediaType}: {pendingAttachment.fileName}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={clearPendingAttachment}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200"
-                        title="Remove attachment"
-                      >
-                        <X className="h-3.5 w-3.5" />
+              <footer className="border-t border-[#d1d7db] bg-[#f0f2f5] px-3 py-2.5 md:px-4">
+                <div className="mx-auto max-w-4xl">
+                  {replyToMessage ? (
+                    <div className="mb-2 flex items-center justify-between rounded-xl border border-[#d1d7db] bg-white px-3 py-2 text-xs">
+                      <div className="min-w-0">
+                        <p className="font-medium text-[#111b21]">Replying to</p>
+                        <p className="truncate text-[#667781]">{replyToMessage.text || `[${replyToMessage.messageType}]`}</p>
+                      </div>
+                      <button onClick={() => setReplyToId(null)} className="rounded-full px-2.5 py-1 text-[#667781] hover:bg-[#f0f2f5]">
+                        Clear
                       </button>
                     </div>
-                    {pendingAttachment.mediaType === "image" && pendingAttachment.previewUrl ? (
-                      <img
-                        src={pendingAttachment.previewUrl}
-                        alt={pendingAttachment.fileName}
-                        className="max-h-40 rounded-lg border border-slate-200 object-cover"
-                      />
-                    ) : null}
-                    {pendingAttachment.mediaType === "video" && pendingAttachment.previewUrl ? (
-                      <video controls className="max-h-44 rounded-lg border border-slate-200">
-                        <source src={pendingAttachment.previewUrl} />
-                      </video>
-                    ) : null}
-                    {pendingAttachment.mediaType === "audio" && pendingAttachment.previewUrl ? (
-                      <audio controls className="h-8 w-full">
-                        <source src={pendingAttachment.previewUrl} />
-                      </audio>
-                    ) : null}
-                    {pendingAttachment.mediaType === "document" ? (
-                      <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700">
-                        <FileText className="h-4 w-4 text-blue-600" />
-                        <span>{pendingAttachment.fileName}</span>
+                  ) : null}
+
+                  {pendingAttachment ? (
+                    <div className="mb-2 rounded-xl border border-[#d1d7db] bg-white p-3">
+                      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-[#54656f]">
+                        <p className="truncate">
+                          Attached {pendingAttachment.mediaType}: {pendingAttachment.fileName}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={clearPendingAttachment}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[#667781] hover:bg-[#f0f2f5]"
+                          title="Remove attachment"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                    ) : null}
-                  </div>
-                ) : null}
+                      {pendingAttachment.mediaType === "image" && pendingAttachment.previewUrl ? (
+                        <img
+                          src={pendingAttachment.previewUrl}
+                          alt={pendingAttachment.fileName}
+                          className="max-h-44 rounded-2xl border border-slate-200 object-cover"
+                        />
+                      ) : null}
+                      {pendingAttachment.mediaType === "video" && pendingAttachment.previewUrl ? (
+                        <video controls className="max-h-44 rounded-2xl border border-slate-200">
+                          <source src={pendingAttachment.previewUrl} />
+                        </video>
+                      ) : null}
+                      {pendingAttachment.mediaType === "audio" && pendingAttachment.previewUrl ? (
+                        <audio controls className="h-8 w-full">
+                          <source src={pendingAttachment.previewUrl} />
+                        </audio>
+                      ) : null}
+                      {pendingAttachment.mediaType === "document" ? (
+                        <div className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          <span>{pendingAttachment.fileName}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
-                <input
-                  ref={attachmentRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
-                  onChange={(event) => onAttachmentSelect(event.target.files?.[0])}
-                />
+                  <input
+                    ref={attachmentRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip"
+                    onChange={(event) => onAttachmentSelect(event.target.files?.[0])}
+                  />
 
-                <div className="relative flex items-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      attachmentRef.current?.click();
-                    }}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50"
-                    title="Attach file"
-                  >
-                    <Paperclip className="h-4 w-4" />
-                  </button>
+                  <div className="mb-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => attachmentRef.current?.click()}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d1d7db] bg-white text-[#54656f] hover:bg-[#f5f6f6]"
+                      title="Attach"
+                    >
+                      <Paperclip className="h-3.5 w-3.5" />
+                    </button>
 
-                  <div className="relative flex-1">
-                    <textarea
-                      value={text}
-                      onChange={(event) => setText(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          void onSend();
+                    <button
+                      ref={emojiToggleRef}
+                      type="button"
+                      onClick={() => {
+                        const next = !showEmojiPicker;
+                        setShowEmojiPicker(next);
+                        if (!next) {
+                          setEmojiSearch("");
+                        } else if (emojiCategory === "recent" && recentEmojis.length === 0) {
+                          setEmojiCategory("smileys");
                         }
+                        setShowTemplateMenu(false);
+                        setShowQuickReplies(false);
                       }}
-                      rows={2}
-                      placeholder="Type a message"
-                      className="min-h-[52px] w-full resize-none rounded-2xl border border-slate-300 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400"
-                    />
+                      className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition ${
+                        showEmojiPicker
+                          ? "border-[#00a884] bg-[#e7fce3] text-[#008069]"
+                          : "border-[#d1d7db] bg-white text-[#54656f] hover:bg-[#f5f6f6]"
+                      }`}
+                      title="Emoji"
+                    >
+                      <span className="text-base leading-none">😊</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowTemplateMenu((prev) => !prev);
+                        setShowEmojiPicker(false);
+                        setShowQuickReplies(false);
+                      }}
+                      className={`hidden h-10 items-center rounded-full border px-3 text-xs font-semibold transition ${
+                        showTemplateMenu
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      Templates
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQuickReplies((prev) => !prev);
+                        setShowEmojiPicker(false);
+                        setShowTemplateMenu(false);
+                      }}
+                      className={`hidden h-10 items-center rounded-full border px-3 text-xs font-semibold transition ${
+                        showQuickReplies
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      Quick replies
+                    </button>
+
+                    <span className="ml-auto hidden text-[11px] font-medium text-[#8696a0] lg:inline">Enter to send</span>
+                  </div>
+
+                  <div className="relative rounded-[22px] border border-[#d1d7db] bg-white px-3 py-1.5">
+                    <div className="flex items-end gap-2">
+                      <textarea
+                        ref={composerTextareaRef}
+                        value={text}
+                        onChange={(event) => {
+                          setText(event.target.value);
+                          composerSelectionRef.current = {
+                            start: event.target.selectionStart ?? event.target.value.length,
+                            end: event.target.selectionEnd ?? event.target.value.length,
+                          };
+                        }}
+                        onClick={rememberComposerSelection}
+                        onSelect={rememberComposerSelection}
+                        onKeyUp={rememberComposerSelection}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            void onSend();
+                          }
+                        }}
+                        rows={3}
+                        placeholder="Type a message"
+                        className="min-h-[42px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-[#111b21] outline-none placeholder:text-[#8696a0]"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => void onSend()}
+                        disabled={sending || (!text.trim() && !pendingAttachment)}
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white transition hover:bg-[#008069] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
+                      </button>
+                    </div>
 
                     {showEmojiPicker ? (
-                      <div className="absolute bottom-14 left-0 z-20 flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                        {COMPOSER_EMOJIS.map((emoji) => (
-                          <button key={`composer_emoji_${emoji}`} onClick={() => onInsertEmoji(emoji)} className="rounded-md px-1.5 py-1 text-base hover:bg-slate-100">
-                            {emoji}
-                          </button>
-                        ))}
+                      <div
+                        ref={emojiPickerRef}
+                        className="absolute bottom-full left-0 z-20 mb-2 w-[min(360px,92vw)] rounded-2xl border border-slate-200 bg-white p-2 shadow-lg"
+                      >
+                        <div className="relative">
+                          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                          <input
+                            value={emojiSearch}
+                            onChange={(event) => setEmojiSearch(event.target.value)}
+                            placeholder="Search emoji"
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-2 text-xs text-slate-700 outline-none focus:border-emerald-300 focus:bg-white"
+                          />
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {EMOJI_CATEGORY_TABS.map((tab) => (
+                            <button
+                              key={tab.key}
+                              type="button"
+                              onClick={() => setEmojiCategory(tab.key)}
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium transition ${
+                                emojiCategory === tab.key
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              }`}
+                              title={tab.label}
+                            >
+                              <span>{tab.icon}</span>
+                              <span>{tab.label}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
+                          {emojiPickerItems.length === 0 ? (
+                            <p className="px-1 py-2 text-xs text-slate-500">No emoji found</p>
+                          ) : (
+                            <div className="grid grid-cols-8 gap-1">
+                              {emojiPickerItems.map((item) => (
+                                <button
+                                  key={`composer_emoji_${item.emoji}`}
+                                  type="button"
+                                  onClick={() => onInsertEmoji(item.emoji)}
+                                  className="rounded-lg px-1 py-1.5 text-lg leading-none hover:bg-slate-100"
+                                  title={item.label}
+                                >
+                                  {item.emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : null}
 
                     {showTemplateMenu ? (
-                      <div className="absolute bottom-14 left-0 z-20 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                      <div className="absolute bottom-full left-0 z-20 mb-2 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                         <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Templates</p>
                         {TEMPLATE_MESSAGES.map((item) => (
-                          <button key={item} onClick={() => onApplyTemplate(item)} className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100">
+                          <button key={item} onClick={() => onApplyTemplate(item)} className="w-full rounded-xl px-2 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">
                             {item}
                           </button>
                         ))}
@@ -1619,10 +1985,10 @@ export default function WhatsAppInboxPage() {
                     ) : null}
 
                     {showQuickReplies ? (
-                      <div className="absolute bottom-14 left-0 z-20 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                      <div className="absolute bottom-full left-0 z-20 mb-2 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-lg">
                         <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Quick replies</p>
                         {QUICK_REPLIES.map((item) => (
-                          <button key={item} onClick={() => onApplyQuickReply(item)} className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100">
+                          <button key={item} onClick={() => onApplyQuickReply(item)} className="w-full rounded-xl px-2 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">
                             {item}
                           </button>
                         ))}
@@ -1630,85 +1996,10 @@ export default function WhatsAppInboxPage() {
                     ) : null}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEmojiPicker((prev) => !prev);
-                      setShowTemplateMenu(false);
-                      setShowQuickReplies(false);
-                    }}
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50"
-                    title="Emoji"
-                  >
-                    <SmilePlus className="h-4 w-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTemplateMenu((prev) => !prev);
-                      setShowEmojiPicker(false);
-                      setShowQuickReplies(false);
-                    }}
-                    className="inline-flex h-11 items-center rounded-xl border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    title="Templates"
-                  >
-                    Templates
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowQuickReplies((prev) => !prev);
-                      setShowEmojiPicker(false);
-                      setShowTemplateMenu(false);
-                    }}
-                    className="inline-flex h-11 items-center rounded-xl border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    title="Quick replies"
-                  >
-                    Quick
-                  </button>
-
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowAutomationMenu((prev) => !prev);
-                        setShowChatMenu(false);
-                      }}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                      title="Automation shortcut"
-                    >
-                      <Zap className="h-4 w-4" />
-                    </button>
-                    {showAutomationMenu ? (
-                      <div className="absolute bottom-14 right-0 z-20 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                        <button onClick={() => onAutomationAction("template")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Send template</button>
-                        <button onClick={() => onAutomationAction("tag")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Add tag</button>
-                        <button onClick={() => onAutomationAction("assign")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Assign agent</button>
-                        <button onClick={() => onAutomationAction("workflow")} className="w-full rounded-lg px-2.5 py-2 text-left text-xs text-slate-700 hover:bg-slate-100">Run automation workflow</button>
-                      </div>
-                    ) : null}
+                  <div className="mt-1.5 flex items-center justify-between gap-3 px-1 text-[11px] text-[#8696a0]">
+                    <p>{selectedConversation.account.name}</p>
+                    <p>{pendingAttachment ? "Attachment ready" : ""}</p>
                   </div>
-
-                  <button
-                    type="button"
-                    className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-300 text-slate-600 hover:bg-slate-50"
-                    title="Voice note"
-                    onClick={() => setChatNotice("Voice recording started (UI demo).")}
-                  >
-                    <Mic className="h-4 w-4" />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => void onSend()}
-                    disabled={sending || (!text.trim() && !pendingAttachment)}
-                    className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <SendHorizontal className="h-4 w-4" />}
-                    {sending ? "Sending" : "Send"}
-                  </button>
                 </div>
               </footer>
             </div>
@@ -1716,169 +2007,287 @@ export default function WhatsAppInboxPage() {
         </main>
 
         <aside
-          className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${
+          className={`overflow-hidden bg-[#f0f2f5] ${
             mobileView === "profile" ? "block" : "hidden"
-          } lg:block`}
+          } lg:col-span-1`}
         >
           {!selectedConversation ? (
-            <div className="flex min-h-[62vh] items-center justify-center p-6 text-center">
-              <p className="text-sm text-slate-500">Select chat to view contact details.</p>
+            <div className="flex min-h-[68vh] items-center justify-center p-6 text-center">
+              <div className="max-w-sm">
+                <UserCircle2 className="mx-auto h-10 w-10 text-slate-300" />
+                <p className="mt-3 text-sm font-semibold text-slate-700">No contact selected</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Choose a conversation to view contact details and CRM fields.
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="h-full max-h-[72vh] overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-slate-200 p-4">
+            <div className="h-full max-h-[74vh] overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-[#f0efee] p-4">
                 <div>
-                  <p className="text-base font-semibold text-slate-900">Contact Profile</p>
-                  <p className="text-xs text-slate-500">Update CRM details from chat</p>
+                  <p className="text-base font-semibold text-slate-900">Contact info</p>
+                  <p className="text-xs text-slate-500">Profile and CRM details for this chat</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setMobileView("chat")}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-600 lg:hidden"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 text-slate-600"
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </button>
               </div>
 
               <div className="space-y-4 p-4">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Source</p>
-                  <p className="mt-1 text-sm text-slate-700">{selectedConversation.contact.source || "manual"}</p>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</label>
-                  <input
-                    value={contactForm.name}
-                    onChange={(event) => setContactForm((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder="Name"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</label>
-                  <input
-                    value={selectedConversation.contact.phone}
-                    disabled
-                    className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-600"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
-                  <input
-                    type="email"
-                    value={contactForm.email}
-                    onChange={(event) => setContactForm((prev) => ({ ...prev, email: event.target.value }))}
-                    placeholder="Email"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tags</label>
-                  <input
-                    value={contactForm.tags}
-                    onChange={(event) => setContactForm((prev) => ({ ...prev, tags: event.target.value }))}
-                    placeholder="vip, lead, support"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</label>
-                  <textarea
-                    value={contactForm.address}
-                    onChange={(event) => setContactForm((prev) => ({ ...prev, address: event.target.value }))}
-                    rows={3}
-                    placeholder="Address"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={contactForm.optedIn}
-                    onChange={(event) =>
-                      setContactForm((prev) => ({
-                        ...prev,
-                        optedIn: event.target.checked,
-                      }))
-                    }
-                  />
-                  Opted in for WhatsApp messaging
-                </label>
-
-                {(contactError || contactMessage) ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {contactError ? <p className="text-rose-700">{contactError}</p> : null}
-                    {contactMessage ? <p className="text-emerald-700">{contactMessage}</p> : null}
+                <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
+                      {initials(selectedConversation.contact.name, selectedConversation.contact.phone)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-semibold text-slate-900">
+                        {selectedConversation.contact.name || "Unnamed contact"}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-500">{selectedConversation.contact.phone}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${conversationStatusClass(
+                            selectedConversation.status
+                          )}`}
+                        >
+                          {selectedConversation.status}
+                        </span>
+                        {contactForm.optedIn ? (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                            Opted-in
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700">
+                            Opt-in off
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => void onSaveContact()}
-                  disabled={savingContact}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {savingContact ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {savingContact ? "Saving..." : "Save Contact Details"}
-                </button>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <a
+                      href={`tel:${selectedConversation.contact.phone}`}
+                      className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <PhoneCall className="h-4 w-4 text-emerald-600" />
+                      Call
+                    </a>
+                    {selectedConversation.contact.email ? (
+                      <a
+                        href={`mailto:${selectedConversation.contact.email}`}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Mail className="h-4 w-4 text-sky-600" />
+                        Email
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-400"
+                      >
+                        <Mail className="h-4 w-4" />
+                        No email
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversation overview</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {profileDetailCards.map((card) => (
+                      <div key={card.label} className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500">{card.label}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{card.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-center gap-2">
+                    <Tags className="h-4 w-4 text-sky-600" />
+                    <p className="text-sm font-semibold text-slate-900">Tags</p>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedConversationStats.tags.length > 0 ? (
+                      selectedConversationStats.tags.map((tag) => (
+                        <span
+                          key={`${selectedConversation.id}_profile_${tag}`}
+                          className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500">No tags added yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest message</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{selectedConversationStats.latestPreview}</p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="mb-4">
+                    <p className="text-sm font-semibold text-slate-900">Edit contact</p>
+                    <p className="mt-1 text-xs text-slate-500">Update customer details without leaving the conversation.</p>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Name</label>
+                      <input
+                        value={contactForm.name}
+                        onChange={(event) => setContactForm((prev) => ({ ...prev, name: event.target.value }))}
+                        placeholder="Name"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-300 focus:bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</label>
+                      <input
+                        value={selectedConversation.contact.phone}
+                        disabled
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-100 px-3 py-2.5 text-sm text-slate-600"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
+                      <input
+                        type="email"
+                        value={contactForm.email}
+                        onChange={(event) => setContactForm((prev) => ({ ...prev, email: event.target.value }))}
+                        placeholder="Email address"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-300 focus:bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tags</label>
+                      <input
+                        value={contactForm.tags}
+                        onChange={(event) => setContactForm((prev) => ({ ...prev, tags: event.target.value }))}
+                        placeholder="vip, lead, support"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none transition focus:border-emerald-300 focus:bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Address</label>
+                      <div className="relative">
+                        <MapPin className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                        <textarea
+                          value={contactForm.address}
+                          onChange={(event) => setContactForm((prev) => ({ ...prev, address: event.target.value }))}
+                          rows={3}
+                          placeholder="Address"
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-emerald-300 focus:bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={contactForm.optedIn}
+                        onChange={(event) =>
+                          setContactForm((prev) => ({
+                            ...prev,
+                            optedIn: event.target.checked,
+                          }))
+                        }
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-medium text-slate-800">WhatsApp opt-in confirmed</span>
+                        <span className="mt-1 block text-xs text-slate-500">
+                          Turn this off if the contact should not receive proactive messages.
+                        </span>
+                      </span>
+                    </label>
+
+                    {(contactError || contactMessage) ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+                        {contactError ? <p className="text-rose-700">{contactError}</p> : null}
+                        {contactMessage ? <p className="text-emerald-700">{contactMessage}</p> : null}
+                      </div>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => void onSaveContact()}
+                      disabled={savingContact}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {savingContact ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      {savingContact ? "Saving..." : "Save contact details"}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
         </aside>
       </section>
 
-      <div className="flex items-center justify-between px-1 text-xs text-slate-500 lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileView("list")}
-          className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 ${
-            mobileView === "list" ? "bg-slate-200 text-slate-900" : "text-slate-600"
-          }`}
-        >
-          <Search className="h-3.5 w-3.5" />
-          Chats
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileView("chat")}
-          className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 ${
-            mobileView === "chat" ? "bg-slate-200 text-slate-900" : "text-slate-600"
-          }`}
-        >
-          <SendHorizontal className="h-3.5 w-3.5" />
-          Chat
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileView("profile")}
-          className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 ${
-            mobileView === "profile" ? "bg-slate-200 text-slate-900" : "text-slate-600"
-          }`}
-        >
-          <UserCircle2 className="h-3.5 w-3.5" />
-          Profile
-        </button>
+      <div className="lg:hidden">
+        <div className="sticky bottom-3 z-20 mx-auto flex w-full max-w-sm items-center justify-between rounded-2xl border border-slate-200 bg-white/95 p-1.5 text-xs shadow-lg backdrop-blur">
+          <button
+            type="button"
+            onClick={() => setMobileView("list")}
+            className={`inline-flex flex-1 items-center justify-center gap-1 rounded-xl px-2 py-2 ${
+              mobileView === "list" ? "bg-slate-900 text-white" : "text-slate-600"
+            }`}
+          >
+            <Search className="h-3.5 w-3.5" />
+            Chats
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileView("chat")}
+            className={`inline-flex flex-1 items-center justify-center gap-1 rounded-xl px-2 py-2 ${
+              mobileView === "chat" ? "bg-slate-900 text-white" : "text-slate-600"
+            }`}
+          >
+            <SendHorizontal className="h-3.5 w-3.5" />
+            Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileView("profile")}
+            className={`inline-flex flex-1 items-center justify-center gap-1 rounded-xl px-2 py-2 ${
+              mobileView === "profile" ? "bg-slate-900 text-white" : "text-slate-600"
+            }`}
+          >
+            <UserCircle2 className="h-3.5 w-3.5" />
+            Profile
+          </button>
+        </div>
       </div>
 
       {previewImageUrl ? (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
           onClick={() => setPreviewImageUrl(null)}
         >
           <div
-            className="relative max-h-[90vh] max-w-5xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            className="relative max-h-[90vh] max-w-5xl overflow-hidden rounded-[28px] border border-white/20 bg-white shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setPreviewImageUrl(null)}
-              className="absolute right-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+              className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-white transition hover:bg-black/80"
               title="Close preview"
             >
               <X className="h-4 w-4" />

@@ -13,7 +13,6 @@ const menu = [
   { name: "SMTP Settings", path: "/dashboard/smtp-management" },
   { name: "IMAP Settings", path: "/dashboard/imap-management" },
   { name: "Onboarding", path: "/dashboard/onboarding-details" },
-  { name: "users mnge", path: "/dashboard/users-management" },
 
   { name: "Leads", path: "/dashboard/leads" },
   { name: "Mail inbox", path: "/dashboard/mail-inbox" },

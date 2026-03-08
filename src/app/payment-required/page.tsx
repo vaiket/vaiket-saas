@@ -17,7 +17,7 @@ export default function PaymentRequired() {
 
         <div className="mt-6 flex gap-3 justify-center">
           <button
-            onClick={() => router.push("/pricing")}
+            onClick={() => router.push("/dashboard/billing")}
             className="px-6 py-3 bg-green-600 text-white rounded font-semibold hover:bg-green-700"
           >
             Choose Plan

@@ -47,7 +47,6 @@ const icons: { [key: string]: React.ReactNode } = {
   "SMTP Settings": <Server className="w-5 h-5" />,
   "IMAP Settings": <Database className="w-5 h-5" />,
   "Onboarding": <UserPlus className="w-5 h-5" />,
-  "Users Management": <Users className="w-5 h-5" />,
   "Leads": <TrendingUp className="w-5 h-5" />,
   "Inbox": <MessageSquare className="w-5 h-5" />,
   "Traffic Analytics": <BarChart3 className="w-5 h-5" />,
@@ -64,7 +63,6 @@ const menu = [
   { name: "SMTP Settings", path: "/dashboard/smtp-management" },
   { name: "IMAP Settings", path: "/dashboard/imap-management" },
   { name: "Onboarding", path: "/dashboard/onboarding-details" },
-  { name: "Users Management", path: "/dashboard/users-management" },
   { name: "Inbox", path: "/dashboard/inbox" },
   { name: "Traffic Analytics", path: "/dashboard/traffic" },
   { name: "Billing", path: "/dashboard/billing" },
@@ -83,11 +81,11 @@ const menuGroups = [
   },
   {
     name: "Management",
-    items: menu.slice(8, 12) // Users Management to Traffic Analytics
+    items: menu.slice(8, 10) // Inbox and Traffic Analytics
   },
   {
     name: "Account",
-    items: menu.slice(12) // Billing and Settings
+    items: menu.slice(10) // Billing and Settings
   }
 ];
 

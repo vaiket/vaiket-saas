@@ -11,7 +11,7 @@ function stripOuterQuotes(value: string) {
   return trimmed;
 }
 
-// Vercel env UI sometimes stores values wrapped in quotes (e.g. `"postgresql://..."`),
+// Some hosting UIs store values wrapped in quotes (e.g. `"postgresql://..."`),
 // which breaks Prisma URL parsing. Normalize once, before PrismaClient is created.
 if (process.env.DATABASE_URL) {
   process.env.DATABASE_URL = stripOuterQuotes(process.env.DATABASE_URL);
@@ -21,14 +21,14 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma =
+const prismaClient =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: ["query", "info", "warn", "error"],
+    log: process.env.NODE_ENV === "production" ? ["warn", "error"] : ["query", "info", "warn", "error"],
   });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prismaClient;
+
+export const prisma = prismaClient;
 
 export default prisma; // ✅ VERY IMPORTANT

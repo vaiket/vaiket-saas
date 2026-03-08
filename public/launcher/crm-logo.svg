@@ -1,0 +1,57 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(470 520) rotate(37) scale(360 320)">
+      <stop offset="0" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#1D4ED8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(640 430) rotate(47) scale(350 320)">
+      <stop offset="0" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#34D399" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tile" x1="300" y1="270" x2="722" y2="736" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#22C55E"/>
+    </linearGradient>
+    <linearGradient id="tileShade" x1="320" y1="320" x2="700" y2="700" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0C4A6E" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#172554" stop-opacity="0.7"/>
+    </linearGradient>
+    <linearGradient id="lineBlue" x1="348" y1="640" x2="710" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <filter id="blurSoft" x="130" y="130" width="764" height="764" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="42"/>
+    </filter>
+    <filter id="shadow" x="180" y="210" width="664" height="664" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="20" stdDeviation="28" flood-color="#0F172A" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#636A70"/>
+  <g filter="url(#blurSoft)">
+    <ellipse cx="485" cy="560" rx="250" ry="230" fill="url(#glowA)"/>
+    <ellipse cx="650" cy="450" rx="245" ry="215" fill="url(#glowB)"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="260" y="250" width="504" height="504" rx="118" fill="url(#tile)"/>
+    <rect x="260" y="250" width="504" height="504" rx="118" fill="url(#tileShade)"/>
+    <rect x="260.5" y="250.5" width="503" height="503" rx="117.5" stroke="#0F172A" stroke-opacity="0.3"/>
+
+    <path d="M325 455C325 405 365 365 415 365H495C522 365 548 373 570 388L602 410C624 424 652 426 676 414L716 394" stroke="#0F172A" stroke-opacity="0.28" stroke-width="16" stroke-linecap="round"/>
+    <path d="M325 455C325 405 365 365 415 365H495C522 365 548 373 570 388L602 410C624 424 652 426 676 414L716 394" stroke="#0EA5E9" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="413" cy="368" r="22" fill="#0EA5E9"/>
+    <circle cx="413" cy="368" r="22" fill="#0F172A" fill-opacity="0.25"/>
+
+    <path d="M365 486L495 620L692 421" stroke="#0F172A" stroke-opacity="0.32" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M365 486L495 620L692 421" stroke="url(#lineBlue)" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="565" y="545" width="44" height="120" rx="8" fill="#0F172A" fill-opacity="0.28"/>
+    <rect x="565" y="545" width="44" height="120" rx="8" fill="#1D4ED8"/>
+    <rect x="628" y="510" width="44" height="155" rx="8" fill="#0F172A" fill-opacity="0.28"/>
+    <rect x="628" y="510" width="44" height="155" rx="8" fill="#2563EB"/>
+
+    <path d="M705 455V600C705 640 673 672 633 672H413C363 672 323 632 323 582V455" stroke="#0F172A" stroke-opacity="0.26" stroke-width="16" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import Lottie from "lottie-react";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +13,7 @@ import {
   CreditCard,
   Database,
   Inbox,
+  LayoutGrid,
   LogOut,
   Mail,
   MessageSquare,
@@ -34,12 +34,10 @@ import {
   ChevronsLeft,
   CheckCheck,
   Clock3,
-  ExternalLink,
   SendHorizontal,
   Zap,
 } from "lucide-react";
 import NotificationBell from "@/components/dashboard/NotificationBell";
-import dotsAnimation from "@/assets/dots.json";
 
 type AppUser = {
   name?: string | null;
@@ -66,12 +64,11 @@ type MenuGroup = {
   items: MenuItem[];
 };
 
-type HubLauncherItem = {
+type HeaderAppLink = {
   name: string;
   path: string;
   subtitle: string;
-  logoPath: string;
-  logoAlt: string;
+  icon: React.ReactNode;
 };
 
 type SidebarTheme = {
@@ -361,16 +358,6 @@ const MENU_GROUPS: MenuGroup[] = [
     ],
   },
   {
-    name: "Management",
-    items: [
-      {
-        name: "Users Management",
-        path: "/dashboard/users-management",
-        icon: <Users className="h-5 w-5" />,
-      },
-    ],
-  },
-  {
     name: "Workspace",
     items: [
       { name: "Billing", path: "/dashboard/billing", icon: <CreditCard className="h-5 w-5" /> },
@@ -379,34 +366,30 @@ const MENU_GROUPS: MenuGroup[] = [
   },
 ];
 
-const HUB_LAUNCHER_APPS: HubLauncherItem[] = [
+const HEADER_APP_LINKS: HeaderAppLink[] = [
   {
-    name: "Vaiket CRM",
+    name: "CRM",
     path: "/dashboard/crm",
-    subtitle: "Leads, clients, pipeline",
-    logoPath: "/launcher/crm.png",
-    logoAlt: "Vaiket CRM logo",
+    subtitle: "Leads and pipeline",
+    icon: <BriefcaseBusiness className="h-4 w-4" />,
   },
   {
-    name: "WhatsApp Hub",
+    name: "WhatsApp",
     path: "/dashboard/whatsapp",
-    subtitle: "Accounts, inbox, automation",
-    logoPath: "/launcher/whatsapp-business.png",
-    logoAlt: "WhatsApp logo",
+    subtitle: "Inbox and accounts",
+    icon: <Smartphone className="h-4 w-4" />,
   },
   {
-    name: "Email Hub",
+    name: "Email",
     path: "/dashboard/email-hub",
-    subtitle: "Mailboxes, campaigns, inbox",
-    logoPath: "/launcher/email.png",
-    logoAlt: "Mail logo",
+    subtitle: "Mailboxes and inbox",
+    icon: <Mail className="h-4 w-4" />,
   },
   {
-    name: "RCS Hub",
+    name: "RCS",
     path: "/dashboard/rcs",
-    subtitle: "RCS inbox, workflows, analytics",
-    logoPath: "/launcher/rcs.png",
-    logoAlt: "RCS logo",
+    subtitle: "Chats and analytics",
+    icon: <MessageSquare className="h-4 w-4" />,
   },
 ];
 
@@ -437,56 +420,56 @@ const HUB_CHILD_SCOPE_EXCLUDE = new Set([
 const SIDEBAR_THEMES: Record<"default" | "hubBlue", SidebarTheme> = {
   default: {
     parentActive:
-      "border border-blue-300/55 bg-[linear-gradient(135deg,rgba(59,130,246,0.26)_0%,rgba(99,102,241,0.16)_100%)] text-white shadow-[0_14px_26px_-20px_rgba(59,130,246,0.95)]",
+      "border border-slate-300 bg-slate-100 text-slate-900",
     parentIdle:
-      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/35 hover:bg-white/[0.06] hover:text-white",
-    iconActive: "text-blue-100",
-    iconIdle: "text-slate-400 group-hover:text-blue-100",
-    iconWrapActive: "grid h-7 w-7 place-items-center rounded-lg bg-blue-500/20",
+      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900",
+    iconActive: "text-slate-700",
+    iconIdle: "text-slate-500 group-hover:text-slate-700",
+    iconWrapActive: "grid h-7 w-7 place-items-center rounded-lg bg-white",
     iconWrapIdle:
-      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/45 group-hover:bg-blue-500/16",
+      "grid h-7 w-7 place-items-center rounded-lg bg-slate-100 group-hover:bg-white",
     submenuToggle:
-      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-100",
-    submenuChevronExpanded: "rotate-180 text-blue-200",
-    tailChevronActive: "translate-x-0 text-blue-200",
-    tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-blue-200",
-    childWrap: "ml-4 mt-2 space-y-1.5 border-l border-slate-600/70 pl-3",
+      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700",
+    submenuChevronExpanded: "rotate-180 text-slate-700",
+    tailChevronActive: "translate-x-0 text-slate-700",
+    tailChevronIdle: "translate-x-0.5 text-slate-400 group-hover:text-slate-700",
+    childWrap: "ml-4 mt-2 space-y-1.5 border-l border-slate-200 pl-3",
     childActive:
-      "border border-blue-400/35 bg-[linear-gradient(135deg,rgba(59,130,246,0.24)_0%,rgba(99,102,241,0.18)_100%)] text-blue-100",
+      "border border-slate-300 bg-slate-100 text-slate-900",
     childIdle:
-      "border border-transparent text-slate-300 hover:border-slate-500/35 hover:bg-white/[0.04] hover:text-slate-100",
-    childIconActive: "bg-blue-400/20",
-    childIconIdle: "bg-slate-700/70",
-    childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-blue-200",
+      "border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900",
+    childIconActive: "bg-white",
+    childIconIdle: "bg-slate-100",
+    childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-slate-500",
     subscriptionRing: "",
-    upgradeBadge: "border-blue-300/35 bg-blue-500/10 text-blue-100",
+    upgradeBadge: "border-slate-300 bg-slate-100 text-slate-700",
   },
   hubBlue: {
     parentActive:
-      "border border-sky-300/55 bg-[linear-gradient(135deg,rgba(56,189,248,0.24)_0%,rgba(59,130,246,0.18)_100%)] text-white shadow-[0_14px_26px_-20px_rgba(56,189,248,0.95)]",
+      "border border-emerald-300 bg-emerald-50 text-emerald-900",
     parentIdle:
-      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-400/35 hover:bg-white/[0.06] hover:text-white",
-    iconActive: "text-sky-100",
-    iconIdle: "text-slate-400 group-hover:text-sky-100",
+      "border border-transparent text-[var(--sidebar-text)] hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900",
+    iconActive: "text-emerald-700",
+    iconIdle: "text-slate-500 group-hover:text-emerald-700",
     iconWrapActive:
-      "grid h-7 w-7 place-items-center rounded-lg bg-sky-500/20",
+      "grid h-7 w-7 place-items-center rounded-lg bg-white",
     iconWrapIdle:
-      "grid h-7 w-7 place-items-center rounded-lg bg-slate-800/45 group-hover:bg-sky-500/15",
+      "grid h-7 w-7 place-items-center rounded-lg bg-slate-100 group-hover:bg-white",
     submenuToggle:
-      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-slate-100",
-    submenuChevronExpanded: "rotate-180 text-sky-200",
-    tailChevronActive: "translate-x-0 text-sky-200",
-    tailChevronIdle: "translate-x-0.5 text-slate-500 group-hover:text-sky-200",
-    childWrap: "ml-4 mt-2 space-y-1.5 border-l border-slate-600/70 pl-3",
+      "mr-1.5 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700",
+    submenuChevronExpanded: "rotate-180 text-emerald-700",
+    tailChevronActive: "translate-x-0 text-emerald-700",
+    tailChevronIdle: "translate-x-0.5 text-slate-400 group-hover:text-emerald-700",
+    childWrap: "ml-4 mt-2 space-y-1.5 border-l border-slate-200 pl-3",
     childActive:
-      "border border-sky-300/45 bg-[linear-gradient(135deg,rgba(56,189,248,0.22)_0%,rgba(59,130,246,0.15)_100%)] text-sky-50",
+      "border border-emerald-300 bg-emerald-50 text-emerald-900",
     childIdle:
-      "border border-transparent text-slate-300 hover:border-slate-500/35 hover:bg-white/[0.04] hover:text-slate-100",
-    childIconActive: "bg-sky-300/25",
-    childIconIdle: "bg-slate-700/70",
-    childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-sky-200",
+      "border border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-900",
+    childIconActive: "bg-white",
+    childIconIdle: "bg-slate-100",
+    childDot: "ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500",
     subscriptionRing: "",
-    upgradeBadge: "border-sky-300/35 bg-sky-500/10 text-sky-100",
+    upgradeBadge: "border-emerald-300 bg-emerald-50 text-emerald-700",
   },
 };
 
@@ -510,10 +493,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [expandedSubmenus, setExpandedSubmenus] = useState<string[]>([]);
   const [user, setUser] = useState<AppUser | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [appsMenuOpen, setAppsMenuOpen] = useState(false);
-  const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const appsMenuRef = useRef<HTMLDivElement | null>(null);
+  const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -618,10 +601,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!appsMenuOpen) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      if (
-        appsMenuRef.current &&
-        !appsMenuRef.current.contains(event.target as Node)
-      ) {
+      if (appsMenuRef.current && !appsMenuRef.current.contains(event.target as Node)) {
         setAppsMenuOpen(false);
       }
     };
@@ -643,8 +623,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     setIsSidebarOpen(false);
-    setProfileMenuOpen(false);
     setAppsMenuOpen(false);
+    setProfileMenuOpen(false);
   }, [pathname]);
 
   useEffect(() => {
@@ -685,8 +665,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   const goTo = (path: string) => {
-    setProfileMenuOpen(false);
     setAppsMenuOpen(false);
+    setProfileMenuOpen(false);
     router.push(path);
   };
 
@@ -857,24 +837,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <style jsx global>{`
         .sidebar-shell {
           --sidebar-primary: #0f172a;
-          --sidebar-accent: #3b82f6;
-          --sidebar-hover: #60a5fa;
-          --sidebar-bg: #0f172a;
-          --sidebar-divider: rgba(148, 163, 184, 0.28);
-          --sidebar-text: #dbe3f1;
-          --sidebar-label: #94a3b8;
+          --sidebar-accent: #16a34a;
+          --sidebar-hover: #22c55e;
+          --sidebar-bg: #ffffff;
+          --sidebar-divider: #e2e8f0;
+          --sidebar-text: #334155;
+          --sidebar-label: #64748b;
         }
         .sidebar-panel {
-          background-image:
-            radial-gradient(circle at 10% 10%, rgba(56, 189, 248, 0.22), transparent 34%),
-            radial-gradient(circle at 92% 2%, rgba(99, 102, 241, 0.2), transparent 36%),
-            linear-gradient(180deg, #0b1220 0%, #0f172a 52%, #111827 100%);
+          background: #ffffff;
         }
         .layout-surface {
-          background-image:
-            radial-gradient(circle at 12% -10%, rgba(59, 130, 246, 0.12), transparent 36%),
-            radial-gradient(circle at 88% 6%, rgba(14, 165, 233, 0.1), transparent 28%),
-            linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+          background: #f8fafc;
         }
         .app-scrollbar::-webkit-scrollbar {
           width: 7px;
@@ -883,17 +857,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           background: transparent;
         }
         .app-scrollbar::-webkit-scrollbar-thumb {
-          background-color: rgba(99, 102, 241, 0.72);
+          background-color: rgba(148, 163, 184, 0.72);
           border-radius: 999px;
           border: 1px solid transparent;
           background-clip: padding-box;
         }
         .app-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(99, 102, 241, 0.96);
+          background-color: rgba(100, 116, 139, 0.96);
         }
         .app-scrollbar {
           scrollbar-width: thin;
-          scrollbar-color: rgba(99, 102, 241, 0.72) transparent;
+          scrollbar-color: rgba(148, 163, 184, 0.72) transparent;
           -webkit-overflow-scrolling: touch;
           overscroll-behavior: contain;
           scroll-behavior: smooth;
@@ -915,23 +889,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       <div className={`${plusJakarta.className} sidebar-shell layout-surface min-h-screen text-gray-900 antialiased`}>
         {isSidebarOpen && (
-          <div className="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-[2px] lg:hidden" />
+          <div className="fixed inset-0 z-40 bg-slate-950/20 lg:hidden" />
         )}
 
         {/* Sidebar */}
         <aside
           ref={sidebarRef}
           className={`
-            gpu-layer sidebar-motion-safe sidebar-panel fixed left-0 top-0 z-50 h-screen overflow-hidden border-r border-[var(--sidebar-divider)] bg-[var(--sidebar-bg)] shadow-[0_20px_45px_-28px_rgba(2,6,23,0.95)]
+            gpu-layer sidebar-motion-safe sidebar-panel fixed left-0 top-0 z-50 h-screen overflow-hidden border-r border-[var(--sidebar-divider)] bg-[var(--sidebar-bg)] shadow-sm
             transition-all duration-300 ease-out
-            ${isCollapsed ? "lg:w-20 w-[84%] max-w-[320px]" : "lg:w-72 w-[84%] max-w-[320px]"}
+            ${isCollapsed ? "lg:w-20 w-[88%] max-w-[304px] sm:w-[84%] sm:max-w-[320px]" : "lg:w-72 w-[88%] max-w-[304px] sm:w-[84%] sm:max-w-[320px]"}
             ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
             flex flex-col
           `}
         >
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0)_26%)]" />
-          <div className="pointer-events-none absolute inset-x-0 top-[104px] h-px bg-gradient-to-r from-transparent via-sky-300/30 to-transparent" />
-
           <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 pb-4 pt-5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-3">
@@ -941,7 +912,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     alt="Vaiket Bridge"
                     width={42}
                     height={42}
-                    className="h-10 w-10 rounded-xl shadow-[0_2px_14px_rgba(20,184,166,0.25)]"
+                    className="h-10 w-10 rounded-xl"
                     priority
                   />
                 ) : (
@@ -958,7 +929,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="rounded-xl p-2 text-slate-300 transition hover:bg-white/10 hover:text-white lg:hidden"
+                className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 lg:hidden"
                 aria-label="Close sidebar"
               >
                 <X className="h-5 w-5" />
@@ -966,7 +937,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
               <button
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="sidebar-motion-safe hidden h-9 w-9 items-center justify-center rounded-xl border border-[var(--sidebar-divider)] bg-white/[0.04] text-slate-200 transition hover:border-indigo-400/45 hover:bg-indigo-400/15 hover:text-indigo-100 lg:flex"
+                className="sidebar-motion-safe hidden h-9 w-9 items-center justify-center rounded-xl border border-[var(--sidebar-divider)] bg-slate-50 text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 lg:flex"
                 aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
                 <ChevronsLeft
@@ -977,35 +948,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             </div>
 
-            {!isCollapsed && (
-              <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-sky-300/25 bg-white/[0.05] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-sky-100">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-                Workspace Ready
-              </div>
-            )}
           </div>
 
           {!isCollapsed && (
             <div className="relative z-10 flex-shrink-0 border-b border-[var(--sidebar-divider)] px-4 py-3.5">
-              <div className="relative rounded-xl border border-slate-500/55 bg-slate-900/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <div className="relative rounded-xl border border-slate-200 bg-slate-50">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   placeholder="Find menu..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full rounded-xl border border-transparent bg-transparent py-2.5 pl-10 pr-11 text-sm text-slate-100 outline-none placeholder:text-slate-400 transition focus:border-blue-400/45 focus:ring-2 focus:ring-blue-400/20"
+                  className="w-full rounded-xl border border-transparent bg-transparent py-2.5 pl-10 pr-11 text-sm text-slate-700 outline-none placeholder:text-slate-400 transition focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
                   aria-label="Search menu items"
                 />
                 {!searchQuery && (
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-slate-500/50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
+                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
                     /
                   </span>
                 )}
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-700/70 hover:text-slate-100"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 transition hover:bg-slate-200 hover:text-slate-700"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -1026,12 +991,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     {!isCollapsed && group.items.length > 0 && (
                       <button
                         onClick={() => toggleGroup(group.name)}
-                        className="sidebar-motion-safe flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--sidebar-label)] transition hover:bg-white/[0.05] hover:text-slate-100"
+                        className="sidebar-motion-safe flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--sidebar-label)] transition hover:bg-slate-50 hover:text-slate-700"
                         aria-expanded={isExpanded}
                         aria-controls={groupId}
                       >
                         <span className="inline-flex items-center gap-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-sky-300/85" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                           {group.name}
                         </span>
                         {isExpanded ? (
@@ -1083,9 +1048,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           <div key={item.path} className="mb-1.5">
                             <div
                               className={`
-                                sidebar-motion-safe group relative flex items-center overflow-hidden rounded-[14px] border transition-[transform,background-color,border-color,color,box-shadow] duration-200 hover:-translate-y-[1px]
+                                sidebar-motion-safe group relative flex items-center overflow-hidden rounded-[14px] border transition-[background-color,border-color,color,box-shadow] duration-200
                                 ${parentStateClass}
-                                ${theme.withBackdrop ? "backdrop-blur-[2px]" : ""}
                                 ${isCollapsed ? "justify-center" : ""}
                               `}
                             >
@@ -1207,85 +1171,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
 
-          <div className="relative z-10 flex-shrink-0 border-t border-[var(--sidebar-divider)] px-3.5 pb-[max(16px,env(safe-area-inset-bottom))] pt-3.5">
-            {isCollapsed ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="relative flex-shrink-0">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(79,70,229,0.45)]">
-                    {user?.name?.charAt(0) || "U"}
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#0f172a] bg-emerald-400" />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="rounded-xl border border-slate-500/60 p-2 text-slate-300 transition hover:border-rose-300/55 hover:bg-rose-500/15 hover:text-rose-100"
-                  title="Logout"
-                  aria-label="Logout"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3 shadow-[0_18px_30px_-24px_rgba(2,6,23,0.9)] backdrop-blur-sm">
-                <div className="flex items-start gap-3">
-                  <div className="relative flex-shrink-0">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-sm font-semibold text-white shadow-[0_8px_22px_rgba(79,70,229,0.45)]">
-                      {user?.name?.charAt(0) || "U"}
-                    </div>
-                    <div className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#0f172a] bg-emerald-400" />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-100">
-                      {user?.name || "User"}
-                    </p>
-                    <p className="truncate text-xs text-slate-400">
-                      {user?.email || "user@example.com"}
-                    </p>
-                    <div className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-500/45 bg-slate-800/45 px-2 py-0.5 text-[10px] text-slate-300">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                      {user?.role || "admin"}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => goTo("/dashboard/profile")}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-500/50 bg-white/[0.04] px-2 py-2 text-xs font-medium text-slate-200 transition hover:border-blue-300/50 hover:bg-blue-500/12 hover:text-blue-100"
-                  >
-                    <User className="h-3.5 w-3.5" />
-                    Profile
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-500/50 bg-white/[0.04] px-2 py-2 text-xs font-medium text-slate-200 transition hover:border-rose-300/55 hover:bg-rose-500/14 hover:text-rose-100"
-                    title="Logout"
-                    aria-label="Logout"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Logout
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </aside>
 
         <div
           className={`relative min-h-screen transition-[padding] duration-300 ${
             isCollapsed ? "lg:pl-20" : "lg:pl-72"
-          }`}
+          } overflow-x-clip`}
         >
-          <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 shadow-[0_10px_30px_-24px_rgba(15,23,42,0.45)] backdrop-blur-xl">
-            <div className="flex h-[72px] items-center justify-between gap-3 px-4 md:px-6">
+          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
+            <div className="flex min-h-[64px] items-center justify-between gap-3 px-3 sm:h-[72px] sm:px-4 md:px-6">
               <div className="flex min-w-0 items-center gap-3">
                 <button
                   onClick={() => setIsSidebarOpen(true)}
-                  className="sidebar-motion-safe inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 lg:hidden"
+                  className="sidebar-motion-safe inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 lg:hidden"
                   aria-label="Open sidebar"
                 >
                   <svg
@@ -1307,23 +1205,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
-                    <p className="truncate text-base font-semibold text-slate-900 md:text-lg">
+                    <p className="truncate text-sm font-semibold text-slate-900 sm:text-base md:text-lg">
                       {pageTitle}
                     </p>
-                    <span className="hidden max-w-[220px] truncate rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-blue-700 md:inline-flex">
+                    <span className="hidden max-w-[220px] truncate rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600 md:inline-flex">
                       {navContext}
                     </span>
                   </div>
-                  <p className="truncate font-mono text-[11px] text-slate-500">{pathname}</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <NotificationBell />
-                <div className="hidden items-center gap-2 rounded-xl border border-blue-200 bg-[linear-gradient(135deg,#ffffff_0%,#eff6ff_100%)] px-3 py-2 text-xs font-medium text-blue-700 shadow-[0_8px_20px_-16px_rgba(37,99,235,0.65)] md:flex">
-                  <Sparkles className="h-4 w-4 text-blue-600" />
-                  Tenant Workspace
-                </div>
 
                 <div className="relative" ref={appsMenuRef}>
                   <button
@@ -1332,97 +1225,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       setAppsMenuOpen((prev) => !prev);
                       setProfileMenuOpen(false);
                     }}
-                    className={`group relative inline-flex h-12 w-12 items-center justify-center rounded-xl border border-slate-200/90 bg-[radial-gradient(circle_at_15%_15%,#dbeafe_0%,#ffffff_42%,#e0e7ff_100%)] shadow-[0_10px_20px_-16px_rgba(15,23,42,0.75)] transition-all duration-300 hover:border-blue-300 hover:shadow-[0_16px_34px_-22px_rgba(59,130,246,0.95)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 ${
-                      appsMenuOpen ? "border-blue-300 bg-[radial-gradient(circle_at_20%_20%,#c7d2fe_0%,#eff6ff_48%,#e9d5ff_100%)]" : ""
-                    }`}
-                    aria-label="Open apps launcher"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50"
+                    aria-label="Open apps menu"
                     aria-haspopup="menu"
                     aria-expanded={appsMenuOpen}
                     title="Apps"
                   >
-                    <span
-                      className={`pointer-events-none absolute inset-0 rounded-xl transition-all duration-300 ${
-                        appsMenuOpen
-                          ? "ring-2 ring-blue-400/90 shadow-[0_0_0_6px_rgba(59,130,246,0.22)]"
-                          : "ring-1 ring-blue-200/80 shadow-[0_0_0_4px_rgba(59,130,246,0.12)] group-hover:ring-2 group-hover:ring-blue-300/90 group-hover:shadow-[0_0_0_6px_rgba(59,130,246,0.16)]"
-                      }`}
-                      aria-hidden="true"
-                    />
-                    <span
-                      className={`pointer-events-none absolute -top-2 left-1/2 inline-flex -translate-x-1/2 items-center justify-center rounded-full border border-blue-200 bg-white px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-blue-700 shadow-sm transition ${
-                        appsMenuOpen ? "opacity-100" : "animate-pulse opacity-100"
-                      }`}
-                      aria-hidden="true"
-                    >
-                      Apps
-                    </span>
-                    <span
-                      className={`pointer-events-none inline-flex h-9 w-9 items-center justify-center transition-transform duration-300 ${
-                        appsMenuOpen ? "scale-105" : "group-hover:scale-105"
-                      }`}
-                    >
-                      <Lottie
-                        animationData={dotsAnimation}
-                        loop
-                        autoplay
-                        className="h-9 w-9"
-                        rendererSettings={{ preserveAspectRatio: "xMidYMid meet" }}
-                      />
-                    </span>
+                    <LayoutGrid className="h-4 w-4" />
                   </button>
 
-                  {appsMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-[360px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_48px_-28px_rgba(15,23,42,0.5)] sm:w-[440px]">
-                      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 px-4 py-3">
+                  {appsMenuOpen ? (
+                    <div className="absolute right-0 z-50 mt-2 w-[300px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg sm:w-[320px]">
+                      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
                         <p className="text-sm font-semibold text-slate-900">Apps</p>
-                        <p className="text-xs text-slate-500">Quick switch between Vaiket hubs</p>
+                        <p className="text-xs text-slate-500">Quick switch between workspaces</p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2.5 p-3 sm:grid-cols-4">
-                        {HUB_LAUNCHER_APPS.map((app) => {
+                      <div className="grid grid-cols-2 gap-2 p-3">
+                        {HEADER_APP_LINKS.map((app) => {
                           const active = isPathMatch(app.path);
-                          const isCrmApp = app.path === "/dashboard/crm";
-                          const isRcsApp = app.path === "/dashboard/rcs";
+
                           return (
                             <button
                               key={app.path}
+                              type="button"
                               onClick={() => goTo(app.path)}
-                              className={`group relative rounded-2xl border p-2.5 text-left transition ${
+                              className={`rounded-2xl border p-3 text-left transition ${
                                 active
-                                  ? "border-blue-300 bg-blue-50 shadow-[0_12px_26px_-20px_rgba(37,99,235,0.9)]"
-                                  : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/50"
+                                  ? "border-emerald-300 bg-emerald-50"
+                                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                               }`}
                             >
-                              <div
-                                className={`mb-2 inline-flex items-center justify-center rounded-xl border ring-4 ${
-                                  isCrmApp
-                                    ? "h-12 w-12 overflow-hidden border-blue-300 bg-[radial-gradient(circle_at_32%_28%,#eef6ff_0%,#dbeafe_58%,#bfdbfe_100%)] ring-blue-100/90"
-                                    : "h-10 w-10 border-slate-200 bg-white ring-slate-50"
+                              <span
+                                className={`mb-2 inline-flex h-9 w-9 items-center justify-center rounded-xl ${
+                                  active ? "bg-white text-emerald-700" : "bg-slate-100 text-slate-700"
                                 }`}
                               >
-                                <Image
-                                  src={app.logoPath}
-                                  alt={app.logoAlt}
-                                  width={isCrmApp ? 56 : isRcsApp ? 30 : 24}
-                                  height={isCrmApp ? 56 : isRcsApp ? 30 : 24}
-                                  className={
-                                    isCrmApp
-                                      ? "h-full w-full scale-[1.32] object-cover object-center"
-                                      : isRcsApp
-                                      ? "h-7 w-7 object-contain"
-                                      : "h-6 w-6 object-contain"
-                                  }
-                                />
-                              </div>
-                              <p className="truncate text-xs font-semibold text-slate-900">{app.name}</p>
-                              <p className="mt-1 min-h-[28px] text-[11px] leading-tight text-slate-500">{app.subtitle}</p>
-                              <ExternalLink className={`absolute right-2.5 top-2.5 h-3.5 w-3.5 text-slate-300 transition ${active ? "text-blue-500" : "group-hover:text-blue-500"}`} />
+                                {app.icon}
+                              </span>
+                              <p className="truncate text-sm font-semibold text-slate-900">{app.name}</p>
+                              <p className="mt-1 text-[11px] leading-4 text-slate-500">{app.subtitle}</p>
                             </button>
                           );
                         })}
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="relative" ref={profileMenuRef}>
@@ -1431,14 +1279,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                       setProfileMenuOpen((prev) => !prev);
                       setAppsMenuOpen(false);
                     }}
-                    className="group flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-2.5 py-1.5 shadow-[0_8px_18px_-16px_rgba(15,23,42,0.7)] transition hover:border-blue-200 hover:bg-blue-50/50"
+                    className="group flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-sm transition hover:bg-slate-50 sm:px-2.5"
                     aria-label="Open profile menu"
                   >
                     <div className="relative flex-shrink-0">
                       <img
                         src={user?.profileImage || "/api/avatar-default.png"}
                         alt="Profile"
-                        className="h-8 w-8 rounded-full border-2 border-blue-100"
+                        className="h-8 w-8 rounded-full border border-slate-200"
                       />
                       <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
                     </div>
@@ -1460,17 +1308,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </button>
 
                   {profileMenuOpen && (
-                    <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-                      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50 px-4 py-3">
+                    <div className="absolute right-0 z-50 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg">
+                      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
                         <p className="truncate text-sm font-semibold text-slate-900">
                           {user?.name || "New User"}
                         </p>
                         <p className="truncate text-xs text-slate-500">
                           {user?.email || ""}
                         </p>
-                        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700">
-                          <Sparkles className="h-3 w-3" />
-                          Tenant Workspace
+                        <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          {user?.role || "member"}
                         </div>
                       </div>
 
@@ -1514,7 +1361,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </header>
 
-          <main className="p-4 md:p-6 lg:p-7">
+          <main className="p-3 sm:p-4 md:p-6 lg:p-7">
             {children}
           </main>
         </div>
