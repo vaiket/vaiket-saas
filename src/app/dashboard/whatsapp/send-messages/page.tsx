@@ -1012,36 +1012,50 @@ export default function WhatsAppSendMessagesPage() {
       ? "Synced"
       : "Default";
   const simpleMode = builderMode === "simple";
+  const showManualSection = !simpleMode || audienceTab === "manual";
+  const showCsvSection = !simpleMode || audienceTab === "csv";
+  const showContactsSection = !simpleMode || audienceTab === "contacts";
+
+  const selectedContactPreview = useMemo(() => {
+    if (selectedContactIds.length === 0) return [] as WaContact[];
+    const byId = new Map(contacts.map((contact) => [contact.id, contact] as const));
+    return selectedContactIds
+      .map((id) => byId.get(id))
+      .filter((contact): contact is WaContact => Boolean(contact));
+  }, [contacts, selectedContactIds]);
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-5">
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-7">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-indigo-100/60 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-28 left-1/3 h-72 w-72 rounded-full bg-emerald-100/50 blur-3xl" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-2xl">
-            <p className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-              <Sparkles className="h-3.5 w-3.5" />
-              WhatsApp Dispatch Studio
+    <div className="mx-auto w-full max-w-[1560px] space-y-4">
+      <section className="rounded-[28px] border border-[#d1d7db] bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-3xl flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#667781]">
+              WhatsApp Hub / Send Messages
             </p>
-            <h1 className="mt-3 text-2xl font-semibold text-slate-900 md:text-4xl">Send Messages</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Build, schedule and dispatch WhatsApp template campaigns with account-level controls.
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold text-[#111b21] md:text-3xl">Send Messages</h1>
+              <span className="inline-flex items-center gap-1 rounded-full border border-[#d1d7db] bg-[#f7f8fa] px-2.5 py-1 text-[11px] font-medium text-[#54656f]">
+                <Sparkles className="h-3.5 w-3.5 text-[#00a884]" />
+                Meta-like clean flow
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-[#54656f]">
+              Fast campaign flow: select device/template, add audience, set dispatch mode, and send.
             </p>
-            <p className="mt-1 text-xs text-slate-500">
-              <Link href="/dashboard" className="hover:underline">
+            <p className="mt-1 text-xs text-[#667781]">
+              <Link href="/dashboard" className="font-medium hover:underline">
                 Dashboard
               </Link>{" "}
               / WhatsApp Hub / Send Messages
             </p>
-            <div className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white p-1">
+            <div className="mt-3 inline-flex rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-1">
               <button
                 type="button"
                 onClick={() => setBuilderMode("simple")}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                   builderMode === "simple"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-[#00a884] text-white"
+                    : "text-[#54656f] hover:bg-white"
                 }`}
               >
                 Simple Mode
@@ -1051,45 +1065,46 @@ export default function WhatsAppSendMessagesPage() {
                 onClick={() => setBuilderMode("advanced")}
                 className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                   builderMode === "advanced"
-                    ? "bg-indigo-600 text-white"
-                    : "text-slate-700 hover:bg-slate-100"
+                    ? "bg-[#00a884] text-white"
+                    : "text-[#54656f] hover:bg-white"
                 }`}
               >
                 Advanced Mode
               </button>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-[#667781]">
               {builderMode === "simple"
-                ? "Simple mode shows only essential controls for faster sending."
-                : "Advanced mode unlocks CSV mapping, filters and full campaign controls."}
+                ? "Simple mode shows only selected tab controls."
+                : "Advanced mode shows all campaign tools together."}
             </p>
           </div>
+
           <div className="grid w-full grid-cols-2 gap-2 sm:max-w-[560px] sm:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white/95 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Devices</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{accounts.length}</p>
+            <div className="rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#667781]">Devices</p>
+              <p className="mt-1 text-lg font-semibold text-[#111b21]">{accounts.length}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/95 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Templates</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{syncedTemplates.length}</p>
+            <div className="rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#667781]">Templates</p>
+              <p className="mt-1 text-lg font-semibold text-[#111b21]">{syncedTemplates.length}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/95 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Unique</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{dispatchNumbersStats.uniqueCount}</p>
+            <div className="rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#667781]">Recipients</p>
+              <p className="mt-1 text-lg font-semibold text-[#111b21]">{dispatchNumbersStats.uniqueCount}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/95 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Duplicates</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{dispatchNumbersStats.duplicatesRemoved}</p>
+            <div className="rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#667781]">Duplicates</p>
+              <p className="mt-1 text-lg font-semibold text-[#111b21]">{dispatchNumbersStats.duplicatesRemoved}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/95 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Contacts</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{selectedContactCount}</p>
+            <div className="rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#667781]">Contacts</p>
+              <p className="mt-1 text-lg font-semibold text-[#111b21]">{selectedContactCount}</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white/95 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Mode</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
+              <p className="text-[11px] uppercase tracking-wide text-[#667781]">Mode</p>
+              <p className="mt-1 text-lg font-semibold text-[#111b21]">
                 {dispatchMode === "instant"
-                  ? "Live"
+                  ? "Instant"
                   : dispatchMode === "scheduled"
                     ? "Scheduled"
                     : "Recurring"}
@@ -1099,21 +1114,8 @@ export default function WhatsAppSendMessagesPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          "1. Pick device + template",
-          "2. Add audience (manual/CSV/contacts)",
-          "3. Set instant or schedule",
-          "4. Review and send",
-        ].map((step) => (
-          <div key={step} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-            {step}
-          </div>
-        ))}
-      </section>
-
       {(message || error) && (
-        <section className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-2 rounded-2xl border border-[#d1d7db] bg-white p-3">
           {message ? (
             <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
               <CheckCircle2 className="h-4 w-4" />
@@ -1129,19 +1131,19 @@ export default function WhatsAppSendMessagesPage() {
         </section>
       )}
 
-      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_370px]">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-[24px] border border-[#d1d7db] bg-white p-4 shadow-sm md:p-5">
           {loading ? (
-            <p className="text-sm text-slate-600">Loading devices...</p>
+            <p className="text-sm text-[#54656f]">Loading devices...</p>
           ) : (
             <div className="space-y-5">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
+              <div className="rounded-2xl border border-[#d1d7db] bg-[#f7f8fa] p-4 md:p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Layers3 className="h-4 w-4 text-indigo-600" />
+                    <Layers3 className="h-4 w-4 text-[#00a884]" />
                     Campaign Setup
                   </p>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  <span className="rounded-full border border-[#d1d7db] bg-white px-2.5 py-1 text-[11px] font-medium text-[#54656f]">
                     Template Source: {templateSourceLabel}
                   </span>
                 </div>
@@ -1153,7 +1155,7 @@ export default function WhatsAppSendMessagesPage() {
                     className={`rounded-xl border px-3 py-2 text-left text-xs transition ${
                       dispatchMode === "instant"
                         ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1 font-semibold">
@@ -1168,7 +1170,7 @@ export default function WhatsAppSendMessagesPage() {
                     className={`rounded-xl border px-3 py-2 text-left text-xs transition ${
                       dispatchMode === "scheduled"
                         ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1 font-semibold">
@@ -1183,7 +1185,7 @@ export default function WhatsAppSendMessagesPage() {
                     className={`rounded-xl border px-3 py-2 text-left text-xs transition ${
                       dispatchMode === "recurring"
                         ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                     }`}
                   >
                     <span className="inline-flex items-center gap-1 font-semibold">
@@ -1200,7 +1202,7 @@ export default function WhatsAppSendMessagesPage() {
                     <select
                       value={accountId}
                       onChange={(e) => setAccountId(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-[#d1d7db] bg-white px-3 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                     >
                       <option value="">Select Device</option>
                       {accounts.map((account) => (
@@ -1216,7 +1218,7 @@ export default function WhatsAppSendMessagesPage() {
                     <select
                       value={selectedTemplateValue}
                       onChange={(e) => handleTemplateSelection(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-[#d1d7db] bg-white px-3 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                     >
                       {filteredTemplateOptionsWithSelected.map((template) => (
                         <option key={template.value} value={template.value}>
@@ -1228,12 +1230,12 @@ export default function WhatsAppSendMessagesPage() {
                 </div>
 
                 {simpleMode ? (
-                  <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                  <div className="mt-3 rounded-xl border border-[#d1d7db] bg-white px-3 py-2 text-[11px] text-[#54656f]">
                     {filteredTemplateOptions.length} templates available. Switch to{" "}
                     <span className="font-semibold text-slate-800">Advanced Mode</span> to apply search and status filters.
                   </div>
                 ) : (
-                  <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-3 md:grid-cols-3">
+                  <div className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-[#d1d7db] bg-white p-3 md:grid-cols-3">
                     <label className="space-y-1">
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         <Search className="h-3.5 w-3.5" />
@@ -1243,7 +1245,7 @@ export default function WhatsAppSendMessagesPage() {
                         value={templateSearch}
                         onChange={(e) => setTemplateSearch(e.target.value)}
                         placeholder="search name/language"
-                        className="w-full rounded-lg border border-slate-300 px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        className="w-full rounded-lg border border-[#d1d7db] px-2.5 py-2 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                       />
                     </label>
                     <label className="space-y-1">
@@ -1254,7 +1256,7 @@ export default function WhatsAppSendMessagesPage() {
                       <select
                         value={templateStatusFilter}
                         onChange={(e) => setTemplateStatusFilter(e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        className="w-full rounded-lg border border-[#d1d7db] bg-white px-2.5 py-2 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                       >
                         <option value="all">All</option>
                         {templateStatuses.map((status) => (
@@ -1272,7 +1274,7 @@ export default function WhatsAppSendMessagesPage() {
                       <select
                         value={templateCategoryFilter}
                         onChange={(e) => setTemplateCategoryFilter(e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        className="w-full rounded-lg border border-[#d1d7db] bg-white px-2.5 py-2 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                       >
                         <option value="all">All</option>
                         {templateCategories.map((category) => (
@@ -1282,13 +1284,13 @@ export default function WhatsAppSendMessagesPage() {
                         ))}
                       </select>
                     </label>
-                    <div className="md:col-span-3 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-600">
+                    <div className="md:col-span-3 rounded-lg border border-[#d1d7db] bg-[#f7f8fa] px-2.5 py-2 text-[11px] text-[#54656f]">
                       Showing {filteredTemplateOptions.length} template options from {templateOptions.length} total.
                     </div>
                   </div>
                 )}
 
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[#54656f]">
                   <span>
                     {templatesLoading
                       ? "Syncing templates from Meta..."
@@ -1300,7 +1302,7 @@ export default function WhatsAppSendMessagesPage() {
                       if (!accountId) return;
                       void loadSyncedTemplates(accountId);
                     }}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                    className="inline-flex items-center gap-1 rounded-lg border border-[#d1d7db] bg-white px-2.5 py-1.5 text-[11px] font-semibold text-[#54656f] transition hover:bg-[#f0f2f5]"
                   >
                     <RefreshCcw className="h-3 w-3" />
                     Refresh Templates
@@ -1317,11 +1319,11 @@ export default function WhatsAppSendMessagesPage() {
                       value={customTemplateKey}
                       onChange={(e) => setCustomTemplateKey(e.target.value)}
                       placeholder="exact_meta_template_name"
-                      className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-[#d1d7db] px-3 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                     />
                   </label>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                  <div className="rounded-xl border border-dashed border-[#d1d7db] bg-[#f7f8fa] px-4 py-3 text-xs text-[#54656f]">
                     Selected template key:{" "}
                     <span className="font-semibold text-slate-800">{resolvedTemplateKey || "-"}</span>
                   </div>
@@ -1333,12 +1335,12 @@ export default function WhatsAppSendMessagesPage() {
                     value={templateLanguage}
                     onChange={(e) => setTemplateLanguage(e.target.value)}
                     placeholder="en_US"
-                    className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                    className="w-full rounded-xl border border-[#d1d7db] px-3 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                   />
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+              <div className="rounded-2xl border border-[#d1d7db] bg-[#f7f8fa] p-3">
                 <p className="mb-2 text-sm font-semibold text-slate-900">Audience Source</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   <button
@@ -1346,8 +1348,8 @@ export default function WhatsAppSendMessagesPage() {
                     onClick={() => setAudienceTab("manual")}
                     className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
                       audienceTab === "manual"
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        ? "border-[#00a884] bg-[#e7f6f2] text-[#007c64]"
+                        : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                     }`}
                   >
                     Manual Numbers
@@ -1357,8 +1359,8 @@ export default function WhatsAppSendMessagesPage() {
                     onClick={() => setAudienceTab("csv")}
                     className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
                       audienceTab === "csv"
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        ? "border-[#00a884] bg-[#e7f6f2] text-[#007c64]"
+                        : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                     }`}
                   >
                     CSV Upload
@@ -1368,8 +1370,8 @@ export default function WhatsAppSendMessagesPage() {
                     onClick={() => setAudienceTab("contacts")}
                     className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${
                       audienceTab === "contacts"
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        ? "border-[#00a884] bg-[#e7f6f2] text-[#007c64]"
+                        : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                     }`}
                   >
                     Contact List
@@ -1382,33 +1384,33 @@ export default function WhatsAppSendMessagesPage() {
                 </p>
               </div>
 
-              {!simpleMode || audienceTab !== "contacts" ? (
-                <div className="rounded-2xl border border-slate-200 p-4 md:p-5">
+              {showManualSection || showCsvSection ? (
+                <div className="rounded-2xl border border-[#d1d7db] p-4 md:p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Hash className="h-4 w-4 text-indigo-600" />
+                    <Hash className="h-4 w-4 text-[#00a884]" />
                     Manual WhatsApp Numbers
                   </span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleRemoveDuplicate}
                       type="button"
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                     >
                       Remove Duplicates
                     </button>
                     <button
                       onClick={() => setNumbersText("")}
                       type="button"
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                     >
                       Clear
                     </button>
                   </div>
                 </div>
 
-                {!simpleMode || audienceTab === "csv" ? (
-                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/70 p-3 md:p-4">
+                {showCsvSection ? (
+                  <div className="mb-4 rounded-xl border border-[#d1d7db] bg-[#f7f8fa] p-3 md:p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">CSV Audience Upload</p>
@@ -1416,7 +1418,7 @@ export default function WhatsAppSendMessagesPage() {
                         Import recipients and map template body variables from CSV columns.
                       </p>
                     </div>
-                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100">
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]">
                       <Upload className="h-3.5 w-3.5" />
                       {csvLoading ? "Parsing..." : "Upload CSV"}
                       <input
@@ -1437,7 +1439,7 @@ export default function WhatsAppSendMessagesPage() {
                       <select
                         value={csvPhoneColumn}
                         onChange={(e) => setCsvPhoneColumn(e.target.value)}
-                        className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                        className="w-full rounded-lg border border-[#d1d7db] bg-white px-2.5 py-2 text-xs outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                         disabled={csvColumns.length === 0}
                       >
                         {csvColumns.length === 0 ? (
@@ -1455,7 +1457,7 @@ export default function WhatsAppSendMessagesPage() {
                       type="button"
                       onClick={handleAppendCsvToRecipients}
                       disabled={csvRecipientMap.size === 0}
-                      className="self-end rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="self-end rounded-lg border border-[#d1d7db] bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5] disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Add CSV To Recipients
                     </button>
@@ -1468,7 +1470,7 @@ export default function WhatsAppSendMessagesPage() {
                         setCsvFileName("");
                         setCsvError(null);
                       }}
-                      className="self-end rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      className="self-end rounded-lg border border-[#d1d7db] bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                     >
                       Clear CSV
                     </button>
@@ -1491,8 +1493,8 @@ export default function WhatsAppSendMessagesPage() {
                   </div>
                 ) : null}
 
-                {!simpleMode || audienceTab === "csv" ? (
-                  <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3 md:p-4">
+                {showCsvSection ? (
+                  <div className="mb-4 rounded-xl border border-[#d1d7db] bg-white p-3 md:p-4">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">Template Variable Mapping</p>
@@ -1504,14 +1506,14 @@ export default function WhatsAppSendMessagesPage() {
                       <button
                         type="button"
                         onClick={handleAddTemplateVariable}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                        className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                       >
                         Add Variable
                       </button>
                       <button
                         type="button"
                         onClick={handleClearTemplateVariables}
-                        className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                        className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                       >
                         Clear Mapping
                       </button>
@@ -1519,7 +1521,7 @@ export default function WhatsAppSendMessagesPage() {
                   </div>
 
                   {templateVariableMaps.length === 0 ? (
-                    <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <p className="rounded-lg border border-dashed border-[#d1d7db] bg-[#f7f8fa] px-3 py-2 text-xs text-slate-600">
                       No variables configured. Add mapping only if selected template expects placeholders.
                     </p>
                   ) : (
@@ -1527,7 +1529,7 @@ export default function WhatsAppSendMessagesPage() {
                       {templateVariableMaps.map((mapping, index) => (
                         <div
                           key={mapping.id}
-                          className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5 md:grid-cols-[80px_130px_minmax(0,1fr)_90px]"
+                          className="grid grid-cols-1 gap-2 rounded-lg border border-[#d1d7db] bg-[#f7f8fa] p-2.5 md:grid-cols-[80px_130px_minmax(0,1fr)_90px]"
                         >
                           <div className="rounded-md bg-white px-2 py-2 text-center text-xs font-semibold text-slate-700">
                             Var {index + 1}
@@ -1539,7 +1541,7 @@ export default function WhatsAppSendMessagesPage() {
                                 source: e.target.value as VariableSource,
                               })
                             }
-                            className="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                            className="rounded-md border border-[#d1d7db] bg-white px-2 py-2 text-xs outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                           >
                             <option value="csv_column">CSV Column</option>
                             <option value="fixed">Fixed Text</option>
@@ -1554,7 +1556,7 @@ export default function WhatsAppSendMessagesPage() {
                                 })
                               }
                               placeholder="Value for all recipients"
-                              className="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                              className="rounded-md border border-[#d1d7db] bg-white px-2 py-2 text-xs outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                             />
                           ) : (
                             <select
@@ -1564,7 +1566,7 @@ export default function WhatsAppSendMessagesPage() {
                                   csvColumn: e.target.value,
                                 })
                               }
-                              className="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                              className="rounded-md border border-[#d1d7db] bg-white px-2 py-2 text-xs outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                               disabled={csvColumns.length === 0}
                             >
                               {csvColumns.length === 0 ? (
@@ -1582,7 +1584,7 @@ export default function WhatsAppSendMessagesPage() {
                           <button
                             type="button"
                             onClick={() => handleRemoveTemplateVariable(mapping.id)}
-                            className="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                            className="rounded-md border border-[#d1d7db] bg-white px-2 py-2 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                           >
                             Remove
                           </button>
@@ -1592,7 +1594,7 @@ export default function WhatsAppSendMessagesPage() {
                   )}
 
                   {templateVariableMaps.length > 0 ? (
-                    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700">
+                    <div className="mt-2 rounded-lg border border-[#d1d7db] bg-[#f7f8fa] px-3 py-2 text-[11px] text-slate-700">
                       <p>
                         Coverage: {dispatchPhoneList.length - templateMapCoverage.missingRecipients} /{" "}
                         {dispatchPhoneList.length} recipients ready.
@@ -1609,14 +1611,14 @@ export default function WhatsAppSendMessagesPage() {
                   </div>
                 ) : null}
 
-                {!simpleMode || audienceTab === "manual" ? (
+                {showManualSection ? (
                   <>
                 <textarea
                   value={numbersText}
                   onChange={(e) => setNumbersText(e.target.value)}
                   rows={7}
                   placeholder="One number per line (E.164 recommended, e.g. +919876543210). Paste CSV column directly."
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-xl border border-[#d1d7db] px-4 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                 />
                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-600">
                   <span className="rounded-full bg-slate-100 px-2 py-1">Total: {stats.inputCount}</span>
@@ -1624,12 +1626,12 @@ export default function WhatsAppSendMessagesPage() {
                   <span className="rounded-full bg-slate-100 px-2 py-1">
                     Duplicates: {stats.duplicatesRemoved}
                   </span>
-                  <span className="rounded-full bg-indigo-50 px-2 py-1 text-indigo-700">
-                    Mapped Vars: {templateVariableMaps.length}
-                  </span>
+                    <span className="rounded-full border border-[#b7e5d6] bg-[#e7f6f2] px-2 py-1 text-[#007c64]">
+                      Mapped Vars: {templateVariableMaps.length}
+                    </span>
                   {includeContactRecipients ? (
                     <>
-                      <span className="rounded-full bg-indigo-50 px-2 py-1 text-indigo-700">
+                      <span className="rounded-full border border-[#b7e5d6] bg-[#e7f6f2] px-2 py-1 text-[#007c64]">
                         Contact Numbers: {contactNumberStats.uniqueCount}
                       </span>
                       <span className="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">
@@ -1640,18 +1642,18 @@ export default function WhatsAppSendMessagesPage() {
                 </div>
                   </>
                 ) : (
-                  <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-600">
+                  <p className="rounded-xl border border-dashed border-[#d1d7db] bg-[#f7f8fa] px-3 py-3 text-xs text-slate-600">
                     Manual numbers are hidden in simple mode. Open <span className="font-semibold">Manual Numbers</span> tab to edit.
                   </p>
                 )}
                 </div>
               ) : null}
 
-              {!simpleMode || audienceTab === "contacts" ? (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:p-5">
+              {showContactsSection ? (
+                <div className="rounded-2xl border border-[#d1d7db] bg-[#f7f8fa] p-4 md:p-5">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
-                    <Users className="h-4 w-4 text-indigo-600" />
+                    <Users className="h-4 w-4 text-[#00a884]" />
                     Audience Builder
                   </span>
                   <div className="flex items-center gap-2">
@@ -1660,8 +1662,8 @@ export default function WhatsAppSendMessagesPage() {
                       onClick={() => setIncludeContactRecipients((prev) => !prev)}
                       className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
                         includeContactRecipients
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                          ? "border-[#00a884] bg-[#e7f6f2] text-[#007c64]"
+                          : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                       }`}
                     >
                       <PhoneCall className="mr-1 inline h-3.5 w-3.5" />
@@ -1673,7 +1675,7 @@ export default function WhatsAppSendMessagesPage() {
                         setSelectedContactIds([]);
                         setIncludeContactRecipients(false);
                       }}
-                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                     >
                       Clear
                     </button>
@@ -1690,7 +1692,7 @@ export default function WhatsAppSendMessagesPage() {
                       value={contactSearch}
                       onChange={(e) => setContactSearch(e.target.value)}
                       placeholder="name / phone / tag"
-                      className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-lg border border-[#d1d7db] bg-white px-2.5 py-2 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                     />
                   </label>
                   <label className="space-y-1">
@@ -1702,8 +1704,8 @@ export default function WhatsAppSendMessagesPage() {
                       onClick={() => setShowSelectedContactsOnly((prev) => !prev)}
                       className={`w-full rounded-lg border px-2.5 py-2 text-xs font-semibold transition ${
                         showSelectedContactsOnly
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                          ? "border-[#00a884] bg-[#e7f6f2] text-[#007c64]"
+                          : "border-[#d1d7db] bg-white text-slate-700 hover:bg-[#f0f2f5]"
                       }`}
                     >
                       {showSelectedContactsOnly ? "Selected Only" : "All Contacts"}
@@ -1715,14 +1717,14 @@ export default function WhatsAppSendMessagesPage() {
                   <button
                     type="button"
                     onClick={toggleFilteredSelection}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                    className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                   >
                     {allFilteredContactsSelected ? "Unselect Filtered" : "Select Filtered"}
                   </button>
                   <button
                     type="button"
                     onClick={() => void loadContacts()}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                    className="rounded-lg border border-[#d1d7db] bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-[#f0f2f5]"
                   >
                     Refresh Contacts
                   </button>
@@ -1734,7 +1736,7 @@ export default function WhatsAppSendMessagesPage() {
                   ) : null}
                 </div>
 
-                <div className="mt-3 max-h-[220px] overflow-y-auto rounded-xl border border-slate-200 bg-white">
+                <div className="mt-3 max-h-[220px] overflow-y-auto rounded-xl border border-[#d1d7db] bg-white">
                   {contactsLoading ? (
                     <p className="px-3 py-4 text-xs text-slate-600">Loading contacts...</p>
                   ) : filteredContacts.length === 0 ? (
@@ -1746,7 +1748,7 @@ export default function WhatsAppSendMessagesPage() {
                         <label
                           key={contact.id}
                           className={`flex cursor-pointer items-start gap-2 border-b border-slate-100 px-3 py-2.5 last:border-b-0 ${
-                            checked ? "bg-indigo-50/60" : "hover:bg-slate-50"
+                            checked ? "bg-[#e7f6f2]" : "hover:bg-slate-50"
                           }`}
                         >
                           <input
@@ -1769,8 +1771,8 @@ export default function WhatsAppSendMessagesPage() {
                 </div>
               ) : null}
 
-              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 md:grid-cols-2 md:p-5">
-                <div className="md:col-span-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+              <div className="grid grid-cols-1 gap-4 rounded-2xl border border-[#d1d7db] bg-[#f7f8fa] p-4 md:grid-cols-2 md:p-5">
+                <div className="md:col-span-2 rounded-xl border border-[#d1d7db] bg-white px-3 py-2 text-xs text-slate-600">
                   Dispatch mode:{" "}
                   <span className="font-semibold text-slate-800">
                     {dispatchMode === "instant"
@@ -1790,7 +1792,7 @@ export default function WhatsAppSendMessagesPage() {
                       type="datetime-local"
                       value={scheduleAt}
                       onChange={(e) => setScheduleAt(e.target.value)}
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-[#d1d7db] bg-white px-3 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                     />
                     {dispatchMode === "scheduled" && scheduleAt && !scheduleIsFuture ? (
                       <p className="text-[11px] font-medium text-amber-700">
@@ -1799,7 +1801,7 @@ export default function WhatsAppSendMessagesPage() {
                     ) : null}
                   </label>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-600">
+                  <div className="rounded-xl border border-dashed border-[#d1d7db] bg-white px-3 py-3 text-xs text-slate-600">
                     Instant mode sends immediately using Meta API.
                   </div>
                 )}
@@ -1811,17 +1813,17 @@ export default function WhatsAppSendMessagesPage() {
                       value={recurringRule}
                       onChange={(e) => setRecurringRule(e.target.value)}
                       placeholder="FREQ=DAILY or FREQ=WEEKLY;BYDAY=MO,WE,FR"
-                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-xl border border-[#d1d7db] bg-white px-3 py-3 text-sm outline-none transition focus:border-[#00a884] focus:ring-2 focus:ring-[#d7f4eb]"
                     />
                   </label>
                 ) : (
-                  <div className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-xs text-slate-600">
+                  <div className="rounded-xl border border-dashed border-[#d1d7db] bg-white px-3 py-3 text-xs text-slate-600">
                     Switch to recurring mode for automated cycle-based sends.
                   </div>
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#d1d7db] bg-white px-4 py-3">
                 <div className="text-xs text-slate-600">
                   <p className="font-semibold text-slate-800">Readiness Check</p>
                   <p>
@@ -1843,7 +1845,7 @@ export default function WhatsAppSendMessagesPage() {
                 <button
                   onClick={handleSend}
                   disabled={sending || !canDispatch}
-                  className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-xl bg-[#00a884] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#008f72] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {sending ? <Clock3 className="h-4 w-4 animate-pulse" /> : <SendHorizontal className="h-4 w-4" />}
                   {sending
@@ -1860,9 +1862,9 @@ export default function WhatsAppSendMessagesPage() {
         </div>
 
         <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="bg-[radial-gradient(circle_at_0%_0%,rgba(15,23,42,0.08),transparent_42%),radial-gradient(circle_at_100%_100%,rgba(79,70,229,0.15),transparent_42%)] p-5">
-              <div className="rounded-2xl border border-white/60 bg-white/90 p-4 shadow-sm">
+          <div className="overflow-hidden rounded-3xl border border-[#d1d7db] bg-white shadow-sm">
+            <div className="bg-[#f7f8fa] p-5">
+              <div className="rounded-2xl border border-[#d1d7db] bg-white p-4 shadow-sm">
                 <p className="text-sm font-semibold text-slate-900">Dispatch Preview</p>
                 <div className="mt-3 space-y-1.5 text-xs text-slate-600">
                   <p>Device: {selectedAccount ? `${selectedAccount.name} (${selectedAccount.phoneNumber})` : "-"}</p>
@@ -1876,7 +1878,7 @@ export default function WhatsAppSendMessagesPage() {
                   <p>Schedule: {scheduleEnabled ? scheduleAt || "Pending date/time" : "No"}</p>
                   <p>Recurring: {recurringEnabled ? recurringRule : "No"}</p>
                 </div>
-                <div className="mt-3 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-[11px] text-slate-600">
+                <div className="mt-3 rounded-lg border border-[#d1d7db] bg-[#f7f8fa] px-2.5 py-2 text-[11px] text-slate-600">
                   Status:{" "}
                   <span
                     className={
@@ -1909,7 +1911,7 @@ export default function WhatsAppSendMessagesPage() {
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-700 shadow-sm">
+          <div className="rounded-2xl border border-[#d1d7db] bg-white p-4 text-xs text-slate-700 shadow-sm">
             <p className="font-semibold text-slate-900">Selected Contact Recipients</p>
             <p className="mt-1 text-slate-600">
               {includeContactRecipients
@@ -1917,11 +1919,9 @@ export default function WhatsAppSendMessagesPage() {
                 : "Contact recipients are not included in this campaign."}
             </p>
             <div className="mt-2 max-h-[180px] space-y-1.5 overflow-y-auto pr-1">
-              {selectedContactIds.slice(0, 30).map((id) => {
-                const contact = contacts.find((item) => item.id === id) || null;
-                if (!contact) return null;
+              {selectedContactPreview.slice(0, 30).map((contact) => {
                 return (
-                  <div key={id} className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5">
+                  <div key={contact.id} className="rounded-md border border-[#d1d7db] bg-[#f7f8fa] px-2 py-1.5">
                     <p className="truncate text-[11px] font-semibold text-slate-800">
                       {contact.name || contact.phone}
                     </p>
